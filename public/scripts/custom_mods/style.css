@@ -88,8 +88,8 @@
 /* Tooltip Styles */
 #custom_toggles_container .tooltip {
     position: absolute;
-    top: 62px;
-    right: 10px;
+    bottom: 5px;
+    right: 5px;
     z-index: 20;
 }
 .custom-tooltip-icon {
@@ -101,7 +101,7 @@
 
 #custom_toggles_container .tooltip .tooltiptext {
     visibility: hidden;
-    width: 320px; /* Increased width to fit the text */
+    width: 420px; /* Increased width to fit the text */
     white-space: normal; /* CRITICAL: Allows the text to wrap onto multiple lines */
     background-color: #000;
     color: #fff;

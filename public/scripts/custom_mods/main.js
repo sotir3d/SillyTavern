@@ -38,9 +38,10 @@ function injectUI() {
                 <div class="custom-tooltip-icon fa-solid fa-circle-info"></div>
                 <span class="tooltiptext">
                     <b>Controls Chat Naming:</b><br><br>
-                    • <b>User is Char:</b> Your messages are labeled with the selected AI name.<br><br>
+                    • <b>User is AI:</b> Your messages are labeled with the actively selected AI name.<br><br>
+                    • <b>{{char}}:</b> Resets to standard behavior (Card Name).<br><br>
                     • <b>Fixed AI Name:</b> The AI's messages and prompt cues use the selected preset.<br><br>
-                    • <b>Default:</b> Resets to standard behavior (Card Name).
+                    • <b>Substitute Strings:</b> Use {{fixed_name}} and {{fixed_name_2}} substitue strings to access fixed name strings. {{active_fixed}} is replaced with the actively selected radio button.
                 </span>
             </div>
             <div class="inline-flex-item">
