@@ -1,3 +1,5 @@
+import * as CustomMods from './scripts/custom_mods/main.js';
+
 import {
     showdown,
     moment,
@@ -2821,6 +2823,13 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
  * @returns {string} The string with substituted parameters.
  */
 export function substituteParams(content, options = {}) {
+
+    // [CUSTOM MOD HOOK] Intercept names before macros are processed
+    // This ensures {{char}} and {{user}} are replaced with your fixed names everywhere.
+    if (typeof options === 'object' && !Array.isArray(options)) {
+        CustomMods.applyNameOverrides(options, name1, name2);
+    }
+
     if (!content) return '';
 
     // Handle legacy signature calls to substituteParams
@@ -2860,6 +2869,11 @@ export function substituteParams(content, options = {}) {
  */
 export function getStoppingStrings(isImpersonate, isContinue) {
     const result = [];
+
+    // [CUSTOM MOD HOOK]
+    if (CustomMods.shouldStopOnCharName()) {
+        result.push(`\n${name2}:`);
+    }
 
     if (power_user.context.names_as_stop_strings) {
         const charString = `\n${name2}:`;
@@ -3742,8 +3756,12 @@ export function createRawPrompt(prompt, api, instructOverride, quietToLoud, syst
     // Format each message in the prompt, accounting for the provided roles
     for (const message of prompt) {
         let name = '';
-        if (message.role === 'user') name = message.name ?? name1;
-        if (message.role === 'assistant') name = message.name ?? name2;
+        if (message.role === 'user') {
+            name = message.name ?? CustomMods.getActiveUserName(name1, name2);
+        }
+        if (message.role === 'assistant') {
+            name = message.name ?? CustomMods.getActiveAiName(name2);
+        }
         if (message.role === 'system') name = message.name ?? '';
         const prefix = isInstruct || api === 'openai' ? '' : (name ? `${name}: ` : '');
         message.content = prefix + substituteParams(message.content ?? '');
@@ -4186,6 +4204,11 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     }
 
     const isContinue = type == 'continue';
+
+    // [CUSTOM MOD HOOK] Branching logic
+    if (isContinue && !dryRun) {
+        CustomMods.handleContinueBranching(chat, chat_metadata, { ensureSwipes, syncMesToSwipe });
+    }
 
     // Rewrite the generation timer to account for the time passed for all the continuations.
     if (isContinue && chat.length) {
@@ -4833,7 +4856,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         // Get instruct mode line
         if (isInstruct && !isContinue) {
-            const name = (quiet_prompt && !quietToLoud && !isImpersonate) ? (quietName ?? 'System') : (isImpersonate ? name1 : name2);
+            // [CUSTOM MOD HOOK]
+            const effectiveAiName = CustomMods.getActiveAiName(name2);
+            const name = (quiet_prompt && !quietToLoud && !isImpersonate) ? (quietName ?? 'System') : (isImpersonate ? name1 : effectiveAiName);
             const isQuiet = quiet_prompt && type == 'quiet';
             lastMesString += formatInstructModePrompt(name, isImpersonate, promptBias, name1, name2, isQuiet, quietToLoud);
         }
@@ -4855,7 +4880,8 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                 lastMesString += '\n';
             }
             if (!isContinue || !(chat[chat.length - 1]?.is_user)) {
-                lastMesString += `${name2}:`;
+                // [CUSTOM MOD HOOK]
+                lastMesString += `${effectiveAiName}:`;
             }
         }
 
@@ -5646,8 +5672,11 @@ export function removeMacros(str) {
 export async function sendMessageAsUser(messageText, messageBias, insertAt = null, compact = false, name = name1, avatar = user_avatar) {
     messageText = getRegexedString(messageText, regex_placement.USER_INPUT);
 
+    // [CUSTOM MOD HOOK]
+    const effectiveUserName = CustomMods.getActiveUserName(name, name2);
+
     const message = {
-        name: name,
+        name: effectiveUserName, // Changed from 'name'
         is_user: true,
         is_system: false,
         send_date: getMessageTimeStamp(),
@@ -6459,7 +6488,8 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         console.debug('entering chat update routine for non-swipe post');
         chat[chat.length] = {};
         chat[chat.length - 1]['extra'] = {};
-        chat[chat.length - 1]['name'] = name2;
+        // [CUSTOM MOD HOOK]
+        chat[chat.length - 1]['name'] = CustomMods.getActiveAiName(name2);
         chat[chat.length - 1]['is_user'] = false;
         chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
         chat[chat.length - 1]['extra']['api'] = getGeneratingApi();
@@ -7864,6 +7894,15 @@ function updateMessage(div) {
     if (bias) {
         text = removeMacros(text);
     }
+
+    // [CUSTOM MOD] Save edited name
+    const nameInput = mesBlock.find('.edit_name_input');
+    if (nameInput.length > 0) {
+        const newName = nameInput.val();
+        mes['name'] = newName;
+        mesElement.attr('ch_name', newName);
+    }
+
     mes['mes'] = text;
     if (mes['swipe_id'] !== undefined) {
         ensureSwipes(mes);
@@ -7981,6 +8020,12 @@ export async function messageEdit(editMessageId) {
         chatElement.scrollTop(chatScrollPosition);
     }
 
+    // [CUSTOM MOD] Make name editable
+    const nameElement = messageElement.find('.ch_name .name_text');
+    const currentName = nameElement.text();
+    const nameInput = $('<input type="text" class="edit_name_input text_pole">').val(currentName);
+    nameElement.replaceWith(nameInput);
+
     updateEditArrowClasses();
 }
 
@@ -8019,6 +8064,14 @@ async function messageEditCancel(messageId = this_edit_mes_id) {
     const reasoningEditDone = thisMesBlock.find('.mes_reasoning_edit_cancel:visible');
     if (reasoningEditDone.length > 0) {
         reasoningEditDone.trigger('click');
+    }
+
+    // [CUSTOM MOD] Revert input to span
+    const nameInput = thisMesDiv.find('.edit_name_input');
+    if (nameInput.length > 0) {
+        const originalName = chat[messageId]['name'];
+        const nameSpan = $('<span class="name_text"></span>').text(originalName);
+        nameInput.replaceWith(nameSpan);
     }
 
     await eventSource.emit(event_types.MESSAGE_UPDATED, messageId);
@@ -8091,6 +8144,13 @@ async function messageEditDone(div) {
     let { mesBlock, text, mes, bias } = updateMessage(div);
     if (this_edit_mes_id == 0) {
         text = substituteParams(text);
+    }
+
+    // [CUSTOM MOD] Revert input to span
+    const nameInput = mesBlock.find('.edit_name_input');
+    if (nameInput.length > 0) {
+        const nameSpan = $('<span class="name_text"></span>').text(mes.name);
+        nameInput.replaceWith(nameSpan);
     }
 
     await eventSource.emit(event_types.MESSAGE_EDITED, this_edit_mes_id);
@@ -10764,6 +10824,8 @@ function initCharacterSearch() {
 
 // MARK: DOM Handlers Start
 jQuery(async function () {
+    CustomMods.initCustomMods();
+
     setTimeout(function () {
         $('#groupControlsToggle').trigger('click');
         $('#groupCurrentMemberListToggle .inline-drawer-icon').trigger('click');
