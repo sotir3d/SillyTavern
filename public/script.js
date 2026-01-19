@@ -2824,10 +2824,19 @@ export function substituteParamsLegacy(content, _name1, _name2, _original, _grou
  */
 export function substituteParams(content, options = {}) {
 
-    // [CUSTOM MOD HOOK] Intercept names before macros are processed
-    // This ensures {{char}} and {{user}} are replaced with your fixed names everywhere.
+    // [CUSTOM MOD HOOK]
     if (typeof options === 'object' && !Array.isArray(options)) {
+        // 1. Capture the original character name BEFORE we override it.
+        // We use 'name2' (global) as fallback if no override is provided in options.
+        const originalCharName = options.name2Override ?? name2;
+
+        // 2. Apply the overrides to {{char}} and {{user}}
         CustomMods.applyNameOverrides(options, name1, name2);
+
+        // 3. Inject the custom macros (fixed_name, character_card, etc.)
+        // We ensure options.dynamicMacros exists, then merge our custom ones into it.
+        options.dynamicMacros = options.dynamicMacros || {};
+        Object.assign(options.dynamicMacros, CustomMods.getCustomMacros(originalCharName));
     }
 
     if (!content) return '';

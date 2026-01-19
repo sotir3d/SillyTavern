@@ -41,7 +41,10 @@ function injectUI() {
                     • <b>User is AI:</b> Your messages are labeled with the actively selected AI name.<br><br>
                     • <b>{{char}}:</b> Resets to standard behavior (Card Name).<br><br>
                     • <b>Fixed AI Name:</b> The AI's messages and prompt cues use the selected preset.<br><br>
-                    • <b>Substitute Strings:</b> Use {{fixed_name}} and {{fixed_name_2}} substitue strings to access fixed name strings. {{active_fixed}} is replaced with the actively selected radio button.
+                    • <b>Substitute Strings:</b><br>
+                            {{character_card}} is always the active character card.<br>
+                            Use {{fixed_name}} and {{fixed_name_2}} substitue strings to access fixed name strings.<br> 
+                            {{active_fixed}} is replaced with the actively selected radio button.
                 </span>
             </div>
             <div class="inline-flex-item">
@@ -250,4 +253,24 @@ export function handleContinueBranching(chat, chat_metadata, { ensureSwipes, syn
 
     // 6. Taint metadata so SillyTavern knows to save to disk
     chat_metadata['tainted'] = true;
+}
+
+/** 
+ * Returns an object containing the custom macros to inject into the replacement engine.
+ * @param {string} originalCharName - The real name of the character card (name2).
+ */
+export function getCustomMacros(originalCharName) {
+    return {
+        // {{fixed_name}}: Always Preset 1
+        fixed_name: modSettings.fixed_ai_name_value_one || '',
+        
+        // {{fixed_name_2}}: Always Preset 2
+        fixed_name_2: modSettings.fixed_ai_name_value_two || '',
+        
+        // {{active_fixed}}: The currently selected radio option (Preset 1, 2, or Char Name)
+        active_fixed: getActiveAiName(originalCharName),
+        
+        // {{character_card}}: Always the original character card name
+        character_card: originalCharName
+    };
 }
