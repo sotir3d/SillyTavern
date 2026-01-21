@@ -135,6 +135,23 @@ function rearrangeMessageLayout(messageElement) {
     const editButtons = messageElement.find('.mes_edit_buttons');
     const mesBlock = messageElement.find('.mes_block');
 
+    // --- NEW BUTTON INJECTION ---
+    // We only want this on the last message, but since messages change position,
+    // we inject it everywhere and hide/show it via CSS or check logic on click.
+    // Ideally, just check logic on click for simplicity.
+    
+    const retryBtn = $(`
+        <div class="mes_button mes_retry_branch" title="Retry Branch: Overwrite this swipe with the previous swipe's text and continue.">
+            <i class="fa-solid fa-code-branch"></i>
+        </div>
+    `);
+    
+    retryBtn.on('click', triggerRetryBranch);
+    
+    // Insert it at the beginning of the buttons list, or wherever you prefer
+    buttons.prepend(retryBtn);
+    // ----------------------------
+
     // Create Footer
     const footer = $('<div class="mes_footer"></div>');
     
@@ -207,54 +224,6 @@ export function applyNameOverrides(options, defaultName1, defaultName2) {
     }
 }
 
-/**
- * Handles the "Overwrite Next Swipe" branching logic for Continue mode.
- * @param {Array} chat - The global chat array.
- * @param {Object} chat_metadata - The global chat metadata object.
- * @param {Object} helpers - Object containing ensureSwipes and syncMesToSwipe functions.
- */
-export function handleContinueBranching(chat, chat_metadata, { ensureSwipes, syncMesToSwipe }) {
-    // Safety checks
-    if (!chat || chat.length === 0) return;
-
-    const lastMesId = chat.length - 1;
-    const lastMsg = chat[lastMesId];
-
-    // 1. Ensure internal data structures exist using the passed helper
-    ensureSwipes(lastMsg);
-
-    // 2. Save manual edits to CURRENT swipe before copying
-    syncMesToSwipe(lastMesId);
-
-    const currentIdx = lastMsg.swipe_id;
-    const nextIdx = currentIdx + 1;
-
-    // 3. Prepare the data (Clone current swipe)
-    const sourceText = lastMsg.swipes[currentIdx];
-    // structuredClone breaks the reference so we don't edit the history
-    const sourceInfo = structuredClone(lastMsg.swipe_info[currentIdx]);
-
-    // 4. Branching Logic
-    if (nextIdx < lastMsg.swipes.length) {
-        // CASE A: Next swipe exists. Overwrite it.
-        // This preserves history (previous swipes) but allows "redo" of the specific branch ahead.
-        lastMsg.swipes[nextIdx] = sourceText;
-        lastMsg.swipe_info[nextIdx] = sourceInfo;
-        console.debug(`[Custom Mod] Overwrote swipe ${nextIdx} for continue branching.`);
-    } else {
-        // CASE B: End of stack. Create new.
-        lastMsg.swipes.push(sourceText);
-        lastMsg.swipe_info.push(sourceInfo);
-        console.debug(`[Custom Mod] Created new swipe ${nextIdx} for continue branching.`);
-    }
-
-    // 5. Advance the pointer
-    lastMsg.swipe_id = nextIdx;
-
-    // 6. Taint metadata so SillyTavern knows to save to disk
-    chat_metadata['tainted'] = true;
-}
-
 /** 
  * Returns an object containing the custom macros to inject into the replacement engine.
  * @param {string} originalCharName - The real name of the character card (name2).
@@ -274,3 +243,196 @@ export function getCustomMacros(originalCharName) {
         character_card: originalCharName
     };
 }
+
+// --- State Tracking ---
+let skipNextBranching = false;
+let retryButtonTracker = null;
+
+// --- UI Injection ---
+
+/**
+ * Injects a free-floating Retry button attached to the body.
+ * Pins to the right of the Send OR Stop button (whichever is active).
+ */
+export function injectRetryButton() {
+    // Prevent duplicates
+    if ($('#retry_branch_button').length) return;
+
+    // 1. Create the button
+    const btn = $(`
+        <div id="retry_branch_button" title="Retry Branch: Interrupt, Revert this swipe to the previous state, and Continue.">
+            <i class="fa-solid fa-sync"></i>
+        </div>
+    `);
+
+    // 2. CSS Styling
+    btn.css({
+        'position': 'fixed',
+        'z-index': '9999',
+        'cursor': 'pointer',
+        'display': 'none',
+        'align-items': 'center',
+        'justify-content': 'center',
+        'width': '40px',        // Increased from 35px
+        'height': '40px',       // Increased from 35px
+        'opacity': '0.5',
+        'font-size': '1.4em',   // Increased from 1.0em
+        'color': 'var(--SmartThemeBodyColor)',
+        'transition': 'opacity 0.2s, top 0.1s, left 0.1s' // Smooth movement
+    });
+
+    // Hover effect
+    btn.hover(
+        function() { $(this).css('opacity', '1'); }, 
+        function() { $(this).css('opacity', '0.5'); }
+    );
+
+    btn.on('click', triggerRetryBranch);
+
+    // 3. Append to Body
+    $('body').append(btn);
+
+    // 4. Position Tracker
+    const updatePosition = () => {
+        // Detect which button is currently the main action button
+        // During generation, #send_but is hidden and #mes_stop is shown
+        let anchor = $('#send_but');
+        if (!anchor.is(':visible')) {
+            anchor = $('#mes_stop');
+        }
+
+        // If neither is visible (e.g. full immersive mode or hidden UI), hide this too
+        if (!anchor.is(':visible')) {
+            btn.css('display', 'none');
+            return;
+        }
+
+        const rect = anchor[0].getBoundingClientRect();
+        
+        // Position: Right side of Anchor + 10px padding
+        const leftPos = rect.right + 10;
+        
+        // Center vertically relative to the anchor button
+        const topPos = rect.top + (rect.height / 2) - (40 / 2); // 40 is btn.height
+
+        btn.css({
+            'display': 'flex',
+            'left': leftPos + 'px',
+            'top': topPos + 'px'
+        });
+    };
+
+    // Run tracker loop
+    updatePosition();
+    if (window.retryButtonTracker) clearInterval(window.retryButtonTracker);
+    window.retryButtonTracker = setInterval(updatePosition, 50); // Faster update for smoother Stop/Send swap
+    $(window).on('resize', updatePosition);
+}
+
+// --- Logic ---
+
+/**
+ * Handles the "Overwrite Next Swipe" branching logic for Continue mode.
+ */
+export function handleContinueBranching(chat, chat_metadata, { ensureSwipes, syncMesToSwipe }) {
+    if (skipNextBranching) {
+        console.debug("[Custom Mod] Branching skipped due to Retry action.");
+        skipNextBranching = false;
+        return;
+    }
+
+    if (!chat || chat.length === 0) return;
+
+    const lastMesId = chat.length - 1;
+    const lastMsg = chat[lastMesId];
+
+    ensureSwipes(lastMsg);
+    syncMesToSwipe(lastMesId);
+
+    const currentIdx = lastMsg.swipe_id;
+    const nextIdx = currentIdx + 1;
+
+    const sourceText = lastMsg.swipes[currentIdx];
+    const sourceInfo = structuredClone(lastMsg.swipe_info[currentIdx]);
+
+    if (nextIdx < lastMsg.swipes.length) {
+        lastMsg.swipes[nextIdx] = sourceText;
+        lastMsg.swipe_info[nextIdx] = sourceInfo;
+    } else {
+        lastMsg.swipes.push(sourceText);
+        lastMsg.swipe_info.push(sourceInfo);
+    }
+
+    lastMsg.swipe_id = nextIdx;
+    chat_metadata['tainted'] = true;
+}
+
+/**
+ * Retries the CURRENT swipe by overwriting it with the PREVIOUS swipe's text.
+ * Interrupts generation if active.
+ */
+export async function triggerRetryBranch() {
+    // 1. Interrupt Logic
+    if ($('#mes_stop').is(':visible')) {
+        $('#mes_stop').trigger('click');
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    const context = window.SillyTavern.getContext();
+    const chat = context.chat;
+    
+    if (!chat || chat.length === 0) return;
+
+    const lastId = chat.length - 1;
+    const msg = chat[lastId];
+
+    if (!msg || (msg.swipe_id || 0) <= 0) {
+        if (window.toastr) window.toastr.info("No previous swipe to branch from.");
+        return;
+    }
+
+    const previousIndex = msg.swipe_id - 1;
+    const sourceText = msg.swipes[previousIndex];
+    const sourceInfo = structuredClone(msg.swipe_info[previousIndex]);
+
+    msg.swipes[msg.swipe_id] = sourceText;
+    msg.swipe_info[msg.swipe_id] = sourceInfo;
+    
+    msg.mes = sourceText;
+
+    const domMsg = document.querySelector(`.mes[mesid="${lastId}"] .mes_text`);
+    if (domMsg) {
+        domMsg.innerText = sourceText; 
+    }
+
+    skipNextBranching = true;
+    $('#option_continue').trigger('click');
+}
+
+// --- Streaming Hooks ---
+
+export function initStreamingLock(processor, chat) {
+    const lastMsg = chat[chat.length - 1];
+    processor.lockedSwipeId = lastMsg ? (lastMsg.swipe_id ?? 0) : 0;
+}
+
+export function updateLockedSwipe(processor, chat, messageId, text) {
+    if (!chat[messageId]) return;
+    if (Array.isArray(chat[messageId].swipes)) {
+        chat[messageId].swipes[processor.lockedSwipeId] = text;
+        if (chat[messageId].swipe_info && chat[messageId].swipe_info[processor.lockedSwipeId]) {
+            chat[messageId].swipe_info[processor.lockedSwipeId].extra = structuredClone(chat[messageId].extra || {});
+        }
+    }
+}
+
+export function shouldUpdateDom(processor, chat, messageId) {
+    if (!chat[messageId]) return false;
+    return chat[messageId].swipe_id === processor.lockedSwipeId;
+}
+
+// Auto-run injection
+$(document).ready(() => {
+    // Wait a moment for ST to load fully
+    setTimeout(injectRetryButton, 2000);
+});

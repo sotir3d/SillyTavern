@@ -151,3 +151,14 @@
     width: auto;
     max-width: 150px;
 }
+
+/* Only show the branch button on the last message */
+.mes:not(.last_mes) .mes_retry_branch {
+    display: none !important;
+}
+
+/* Optional: Hide if there are no swipes (requires SillyTavern to update classes)
+   ST adds 'swipes_visible' class to .mes if swipes exist, but doesn't specifically
+   mark if we are on index 0 via CSS. 
+   So strict hiding based on index requires more JS observer logic. 
+   For now, the JS validation in step 1 handles the click gracefully. */
