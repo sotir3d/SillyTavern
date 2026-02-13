@@ -135,23 +135,6 @@ function rearrangeMessageLayout(messageElement) {
     const editButtons = messageElement.find('.mes_edit_buttons');
     const mesBlock = messageElement.find('.mes_block');
 
-    // --- NEW BUTTON INJECTION ---
-    // We only want this on the last message, but since messages change position,
-    // we inject it everywhere and hide/show it via CSS or check logic on click.
-    // Ideally, just check logic on click for simplicity.
-    
-    const retryBtn = $(`
-        <div class="mes_button mes_retry_branch" title="Retry Branch: Overwrite this swipe with the previous swipe's text and continue.">
-            <i class="fa-solid fa-code-branch"></i>
-        </div>
-    `);
-    
-    retryBtn.on('click', triggerRetryBranch);
-    
-    // Insert it at the beginning of the buttons list, or wherever you prefer
-    buttons.prepend(retryBtn);
-    // ----------------------------
-
     // Create Footer
     const footer = $('<div class="mes_footer"></div>');
     
