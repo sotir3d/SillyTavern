@@ -1,48 +1,44 @@
-FROM node:lts-alpine3.23
+FROM node:lts-alpine3.22
 
 # Arguments
 ARG APP_HOME=/home/node/app
 
 # Install system dependencies
-# "Don't rely on the base image for tools; if you call it, you install it." ;)
-RUN apk add --no-cache gcompat tini git git-lfs su-exec shadow dos2unix
+RUN apk add --no-cache gcompat tini git git-lfs
 
-# Create app directory and set ownership
+# Create app directory
 WORKDIR ${APP_HOME}
-RUN chown node:node ${APP_HOME}
 
 # Set NODE_ENV to production
 ENV NODE_ENV=production
 
-# Bundle app source and set ownership
-COPY --chown=node:node . ./
+# Bundle app source
+COPY . ./
 
 RUN \
   echo "*** Install npm packages ***" && \
   npm ci --no-audit --no-fund --loglevel=error --no-progress --omit=dev && npm cache clean --force
 
-# Create config directory and link config.yaml. Added hardcoded dirs(constants.js?)
-# that must be present for Non-Root Mode and volumeless docker runs.
+# Create config directory and link config.yaml
 RUN \
   rm -f "config.yaml" || true && \
-  mkdir -p config data plugins public/scripts/extensions/third-party backups && \
-  chown -R node:node config data plugins public/scripts/extensions/third-party backups && \
-  ln -s "./config/config.yaml" "config.yaml"
+  ln -s "./config/config.yaml" "config.yaml" || true && \
+  mkdir "config" || true
 
 # Pre-compile public libraries
 RUN \
   echo "*** Run Webpack ***" && \
   node "./docker/build-lib.js"
 
-# Set the entrypoint script and cleanup
+# Set the entrypoint script
 RUN \
   echo "*** Cleanup ***" && \
   mv "./docker/docker-entrypoint.sh" "./" && \
+  rm -rf "./docker" && \
   echo "*** Make docker-entrypoint.sh executable ***" && \
   chmod +x "./docker-entrypoint.sh" && \
   echo "*** Convert line endings to Unix format ***" && \
-  dos2unix "./docker-entrypoint.sh" && \
-  rm -rf "./docker"
+  dos2unix "./docker-entrypoint.sh"
 
 # Fix extension repos permissions
 RUN git config --global --add safe.directory "*"

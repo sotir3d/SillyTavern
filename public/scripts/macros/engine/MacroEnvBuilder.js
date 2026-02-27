@@ -22,7 +22,7 @@ import { getStringHash } from '/scripts/utils.js';
  * @property {string|null} [original]
  * @property {string|null} [groupOverride]
  * @property {boolean} [replaceCharacterCard]
- * @property {Record<string, import('./MacroEnv.types.js').DynamicMacroValue>|null} [dynamicMacros]
+ * @property {Record<string, any>|null} [dynamicMacros]
  * @property {(value: string) => string} [postProcessFn]
  */
 
@@ -143,11 +143,8 @@ class MacroEnvBuilder {
         env.functions.postProcess = typeof ctx.postProcessFn === 'function' ? ctx.postProcessFn : (x) => x;
 
         // Dynamic, per-call macros that should be visible only for this evaluation run.
-        // Keys are normalized to lowercase for case-insensitive matching.
         if (ctx.dynamicMacros && typeof ctx.dynamicMacros === 'object') {
-            for (const [key, value] of Object.entries(ctx.dynamicMacros)) {
-                env.dynamicMacros[key.toLowerCase()] = value;
-            }
+            env.dynamicMacros = { ...ctx.dynamicMacros };
         }
 
         // Let providers augment the env, if any are registered. Apply them in order,

@@ -77,7 +77,7 @@ export class SlashCommandHandler {
             },
         };
 
-        globalThis.qrEnumProviderExecutables = localEnumProviders.qrExecutables;
+        window['qrEnumProviderExecutables'] = localEnumProviders.qrExecutables;
 
         SlashCommandParser.addCommandObject(SlashCommand.fromProps({ name: 'qr',
             callback: (_, value) => this.executeQuickReplyByIndex(Number(value)),

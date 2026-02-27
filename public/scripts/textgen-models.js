@@ -33,7 +33,6 @@ const OPENROUTER_PROVIDERS = [
     'Alibaba',
     'Amazon Bedrock',
     'Amazon Nova',
-    'Ambient',
     'Anthropic',
     'Arcee AI',
     'AtlasCloud',
@@ -41,6 +40,7 @@ const OPENROUTER_PROVIDERS = [
     'Azure',
     'BaseTen',
     'Black Forest Labs',
+    'BytePlus',
     'Cerebras',
     'Chutes',
     'Cirrascale',
@@ -57,16 +57,15 @@ const OPENROUTER_PROVIDERS = [
     'GMICloud',
     'Google',
     'Google AI Studio',
+    'GoPomelo',
     'Groq',
     'Hyperbolic',
     'Inception',
-    'Inceptron',
     'InferenceNet',
     'Infermatic',
     'Inflection',
     'Liquid',
     'Mancer 2',
-    'Mara',
     'Minimax',
     'Mistral',
     'ModelRun',
@@ -85,19 +84,15 @@ const OPENROUTER_PROVIDERS = [
     'Phala',
     'Relace',
     'SambaNova',
-    'Seed',
     'SiliconFlow',
-    'Sourceful',
     'Stealth',
-    'StepFun',
     'StreamLake',
     'Switchpoint',
+    'Targon',
     'Together',
-    'Upstage',
     'Venice',
     'WandB',
     'xAI',
-    'Xiaomi',
     'Z.AI',
 ];
 
@@ -885,8 +880,8 @@ async function downloadTabbyModel() {
         }
 
         // Params for the server side of ST
-        params.api_server = serverUrl;
-        params.api_type = textgen_settings.type;
+        params['api_server'] = serverUrl;
+        params['api_type'] = textgen_settings.type;
 
         toastr.info('Downloading. Check the Tabby console for progress reports.');
 
@@ -1069,13 +1064,6 @@ export function initTextGenModels() {
             searchInputCssClass: 'text_pole',
             width: '100%',
             templateResult: getAphroditeModelTemplate,
-        });
-        $('.openrouter_quantizations').select2({
-            closeOnSelect: false,
-            placeholder: t`Select quantizations. No selection = all quantizations.`,
-            searchInputCssClass: 'text_pole',
-            searchInputPlaceholder: t`Search quantizations...`,
-            width: '100%',
         });
         providersSelect.select2({
             sorter: data => data.sort((a, b) => a.text.localeCompare(b.text)),

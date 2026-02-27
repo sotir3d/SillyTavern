@@ -822,10 +822,9 @@ async function basicUserLogin(request) {
         return false;
     }
 
-    const [username, ...passwordParts] = Buffer.from(credentials, 'base64')
+    const [username, password] = Buffer.from(credentials, 'base64')
         .toString('utf8')
         .split(':');
-    const password = passwordParts.join(':');
 
     const userHandles = await getAllUserHandles();
     for (const userHandle of userHandles) {

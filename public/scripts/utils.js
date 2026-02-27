@@ -36,16 +36,10 @@ export const localizePagination = function (container) {
 
 /**
  * Checks if the current environment supports negative lookbehind in regular expressions.
- * @type {{ (): boolean; result?: boolean }} Defines the function as a memoized object with a cached result.
  * @returns {boolean} True if negative lookbehind is supported, false otherwise.
  */
 export function canUseNegativeLookbehind() {
-    /**
-     * A reference to the function itself, typed as a callable object with a cache property.
-     * @type {{ (): boolean; result?: boolean }}
-     */
-    const fn = canUseNegativeLookbehind;
-    let result = fn.result;
+    let result = canUseNegativeLookbehind['result'];
     if (typeof result !== 'boolean') {
         try {
             new RegExp('(?<!_)');
@@ -53,7 +47,7 @@ export function canUseNegativeLookbehind() {
         } catch (e) {
             result = false;
         }
-        fn.result = result;
+        canUseNegativeLookbehind['result'] = result;
     }
     return result;
 }
@@ -679,28 +673,18 @@ export function isElementInViewport(el) {
 
 /**
  * Returns a name that is unique among the names that exist.
- * @param {string} baseName The name to check.
+ * @param {string} name The name to check.
  * @param {{ (name: string): boolean; }} exists Function to check if name exists.
- * @param {Object} [options] The options.
- * @param {((baseName: string, i: number) => string)|null} [options.nameBuilder=null] Function to build the name.
- *        Starts with the index provided by `startIndex` (default is 1). If not provided, uses "${baseName} (${i})".
- * @param {number} [options.maxTries=1000] The maximum number of tries to find a unique name. Default is 1000.
- * @param {number} [options.startIndex=1] The index to start with when building the name. Default is 1.
- *        When set to 0, the intention is to also check if the basename (without applied index) is free.
- * @returns {string|null} A unique name. Null if no unique name could be found in `maxTries`.
+ * @returns {string} A unique name.
  */
-export function getUniqueName(baseName, exists, { nameBuilder = null, maxTries = 1000, startIndex = 1 } = {}) {
-    nameBuilder ??= (baseName, i) => i === 0 ? baseName : `${baseName} (${i})`;
-    let i = startIndex;
-    let name;
-    while (i < maxTries + startIndex) {
-        name = nameBuilder(baseName, i);
-        if (!exists(name)) {
-            return name;
-        }
+export function getUniqueName(name, exists) {
+    let i = 1;
+    let baseName = name;
+    while (exists(name)) {
+        name = `${baseName} (${i})`;
         i++;
     }
-    return null;
+    return name;
 }
 
 /**
@@ -2456,8 +2440,8 @@ export async function fetchFaFile(name) {
     const sheet = style.sheet;
     style.remove();
     return [...sheet.cssRules]
-        .filter(rule => (rule instanceof CSSStyleRule && rule.style?.content))
-        .map(rule => rule['selectorText'].split(/,\s*/).map(selector => selector.split('::').shift().slice(1)))
+        .filter(rule => rule.style?.content)
+        .map(rule => rule.selectorText.split(/,\s*/).map(selector => selector.split('::').shift().slice(1)))
     ;
 }
 
@@ -2749,33 +2733,6 @@ export function textValueMatcher(params, data) {
  */
 export function versionCompare(srcVersion, minVersion) {
     return (srcVersion || '0.0.0').localeCompare(minVersion, undefined, { numeric: true, sensitivity: 'base' }) > -1;
-}
-
-/**
- * Logs a warning to the console for slash command executions.
- * Strips internal arguments (starting with '_') from the args object for cleaner logging.
- * @param {string} message - The warning message to log.
- * @param {Object} args - The arguments object from the slash command, including named arguments and internal values.
- * @param {{[unnamedArgName: string]: string}} [valueObj=null] - The user-built object containing context for the warning (e.g., { uid: uid }).
- * @returns {void}
- */
-export function logSlashCommandWarn(message, args, valueObj = null) {
-    if (valueObj !== null && valueObj !== undefined) {
-        console.warn(message, valueObj, stripInternalArgs(args));
-    } else {
-        console.warn(message, stripInternalArgs(args));
-    }
-    return;
-    function stripInternalArgs(args) {
-        // strip all args/properties that start with an underscore
-        const result = {};
-        for (const [key, value] of Object.entries(args)) {
-            if (!key.startsWith('_')) {
-                result[key] = value;
-            }
-        }
-        return result;
-    }
 }
 
 /**

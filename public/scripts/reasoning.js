@@ -1163,8 +1163,7 @@ function setReasoningEventHandlers() {
         }
 
         const textarea = messageBlock.find('.reasoning_edit_textarea');
-        let newReasoning = String(textarea.val());
-        newReasoning = substituteParams(newReasoning);
+        const newReasoning = String(textarea.val());
         textarea.remove();
         if (newReasoning === message.extra.reasoning) {
             return;

@@ -437,13 +437,9 @@ async function onChatEvent() {
 
     const context = getContext();
     const chat = context.chat;
-    // Chat can't be empty.
-    if (chat.length === 0) return;
-
-    const lastMessage = chat[chat.length - 1];
 
     // No new messages - do nothing
-    if ((lastMessageId === chat.length && getStringHash(lastMessage.mes) === lastMessageHash)) {
+    if (chat.length === 0 || (lastMessageId === chat.length && getStringHash(chat[chat.length - 1].mes) === lastMessageHash)) {
         return;
     }
 
@@ -455,18 +451,18 @@ async function onChatEvent() {
 
     // Message has been edited / regenerated - delete the saved memory
     if (chat.length
-        && lastMessage.extra
-        && lastMessage.extra.memory
+        && chat[chat.length - 1].extra
+        && chat[chat.length - 1].extra.memory
         && lastMessageId === chat.length
-        && getStringHash(lastMessage.mes) !== lastMessageHash) {
-        delete lastMessage.extra.memory;
+        && getStringHash(chat[chat.length - 1].mes) !== lastMessageHash) {
+        delete chat[chat.length - 1].extra.memory;
     }
 
     summarizeChat(context)
         .catch(console.error)
         .finally(() => {
             lastMessageId = context.chat?.length ?? null;
-            lastMessageHash = getStringHash((context.chat.length && context.chat[context.chat.length - 1].mes) ?? '');
+            lastMessageHash = getStringHash((context.chat.length && context.chat[context.chat.length - 1]['mes']) ?? '');
         });
 }
 

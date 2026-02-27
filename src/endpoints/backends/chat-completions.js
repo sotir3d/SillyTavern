@@ -1,4 +1,3 @@
-/* eslint-disable dot-notation */
 import process from 'node:process';
 import util from 'node:util';
 import express from 'express';
@@ -10,7 +9,6 @@ import {
     AZURE_OPENAI_KEYS,
     CHAT_COMPLETION_SOURCES,
     GEMINI_SAFETY,
-    NANOGPT_REASONING_EFFORT_MAP,
     OPENAI_REASONING_EFFORT_MAP,
     OPENAI_REASONING_EFFORT_MODELS,
     OPENAI_VERBOSITY_MODELS,
@@ -79,7 +77,7 @@ const API_NANOGPT = 'https://nano-gpt.com/api/v1';
 const API_DEEPSEEK = 'https://api.deepseek.com/beta';
 const API_XAI = 'https://api.x.ai/v1';
 const API_AIMLAPI = 'https://api.aimlapi.com/v1';
-const API_POLLINATIONS = 'https://gen.pollinations.ai/v1';
+const API_POLLINATIONS = 'https://text.pollinations.ai/openai';
 const API_MOONSHOT = 'https://api.moonshot.ai/v1';
 const API_FIREWORKS = 'https://api.fireworks.ai/inference/v1';
 const API_COMETAPI = 'https://api.cometapi.com/v1';
@@ -219,15 +217,14 @@ async function sendClaudeRequest(request, response) {
             controller.abort();
         });
         const additionalHeaders = {};
-        const betaHeaders = ['output-128k-2025-02-19', 'context-1m-2025-08-07'];
+        const betaHeaders = ['output-128k-2025-02-19'];
         const useTools = Array.isArray(request.body.tools) && request.body.tools.length > 0;
         const useSystemPrompt = Boolean(request.body.use_sysprompt);
         const convertedPrompt = convertClaudeMessages(request.body.messages, request.body.assistant_prefill, useSystemPrompt, useTools, getPromptNames(request));
-        const useThinking = /^claude-(3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6)/.test(request.body.model);
-        const useWebSearch = /^claude-(3-5|3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6)/.test(request.body.model) && Boolean(request.body.enable_web_search);
-        const isLimitedSampling = /^claude-(opus-4-1|sonnet-4-5|haiku-4-5|opus-4-5|opus-4-6)/.test(request.body.model);
-        const useVerbosity = /^claude-(opus-4-5|opus-4-6)/.test(request.body.model);
-        const noPrefillModel = /^claude-(opus-4-6)/.test(request.body.model);
+        const useThinking = /^claude-(3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5)/.test(request.body.model);
+        const useWebSearch = /^claude-(3-5|3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5)/.test(request.body.model) && Boolean(request.body.enable_web_search);
+        const isLimitedSampling = /^claude-(opus-4-1|sonnet-4-5|haiku-4-5|opus-4-5)/.test(request.body.model);
+        const useVerbosity = /^claude-(opus-4-5)/.test(request.body.model);
         let fixThinkingPrefill = false;
         // Add custom stop sequences
         const stopSequences = [];
@@ -248,7 +245,7 @@ async function sendClaudeRequest(request, response) {
         };
         if (useSystemPrompt) {
             if (enableSystemPromptCache && Array.isArray(convertedPrompt.systemPrompt) && convertedPrompt.systemPrompt.length) {
-                convertedPrompt.systemPrompt[convertedPrompt.systemPrompt.length - 1].cache_control = { type: 'ephemeral', ttl: cacheTTL };
+                convertedPrompt.systemPrompt[convertedPrompt.systemPrompt.length - 1]['cache_control'] = { type: 'ephemeral', ttl: cacheTTL };
             }
 
             requestBody.system = convertedPrompt.systemPrompt;
@@ -264,7 +261,7 @@ async function sendClaudeRequest(request, response) {
                 .map(fn => ({ name: fn.name, description: fn.description, input_schema: flattenSchema(fn.parameters, request.body.chat_completion_source) }));
 
             if (enableSystemPromptCache && requestBody.tools.length) {
-                requestBody.tools[requestBody.tools.length - 1].cache_control = { type: 'ephemeral', ttl: cacheTTL };
+                requestBody.tools[requestBody.tools.length - 1]['cache_control'] = { type: 'ephemeral', ttl: cacheTTL };
             }
         }
 
@@ -328,7 +325,7 @@ async function sendClaudeRequest(request, response) {
             delete requestBody.top_k;
         }
 
-        if ((fixThinkingPrefill || noPrefillModel) && convertedPrompt.messages.length && convertedPrompt.messages[convertedPrompt.messages.length - 1].role === 'assistant') {
+        if (fixThinkingPrefill && convertedPrompt.messages.length && convertedPrompt.messages[convertedPrompt.messages.length - 1].role === 'assistant') {
             convertedPrompt.messages[convertedPrompt.messages.length - 1].role = 'user';
         }
 
@@ -1691,8 +1688,8 @@ router.post('/status', async function (request, statusResponse) {
             apiKey = readSecret(request.user.directories, SECRET_KEYS.AIMLAPI);
             headers = { ...AIMLAPI_HEADERS };
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.POLLINATIONS) {
-            apiUrl = 'https://gen.pollinations.ai/text';
-            apiKey = readSecret(request.user.directories, SECRET_KEYS.POLLINATIONS);
+            apiUrl = 'https://text.pollinations.ai';
+            apiKey = 'NONE';
             headers = {};
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.GROQ) {
             apiUrl = API_GROQ;
@@ -1704,8 +1701,8 @@ router.post('/status', async function (request, statusResponse) {
             headers = {};
             throw new Error('This provider is temporarily disabled.');
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.MOONSHOT) {
-            apiUrl = new URL(request.body.reverse_proxy || API_MOONSHOT).toString();
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MOONSHOT);
+            apiUrl = API_MOONSHOT;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.MOONSHOT);
             headers = {};
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.FIREWORKS) {
             apiUrl = API_FIREWORKS;
@@ -2066,8 +2063,6 @@ router.post('/generate', async function (request, response) {
             if (getConfigValue('openai.randomizeUserId', false, 'boolean')) {
                 bodyParams['user'] = uuidv4();
             }
-
-            embedOpenRouterMedia(request.body.messages, { audio: true, video: false });
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.OPENROUTER) {
             apiUrl = 'https://openrouter.ai/api/v1';
             apiKey = readSecret(request.user.directories, SECRET_KEYS.OPENROUTER);
@@ -2096,11 +2091,6 @@ router.post('/generate', async function (request, response) {
                     allow_fallbacks: request.body.allow_fallbacks ?? true,
                     order: request.body.provider ?? [],
                 };
-            }
-
-            if (Array.isArray(request.body.quantizations) && request.body.quantizations.length > 0) {
-                bodyParams['provider'] ??= {};
-                bodyParams['provider']['quantizations'] = request.body.quantizations;
             }
 
             if (request.body.use_fallback) {
@@ -2132,7 +2122,7 @@ router.post('/generate', async function (request, response) {
             const enableGeminiSystemPromptCache = getConfigValue('gemini.enableSystemPromptCache', false, 'boolean');
 
             if (Array.isArray(request.body.messages)) {
-                embedOpenRouterMedia(request.body.messages, { audio: true, video: true });
+                embedOpenRouterMedia(request.body.messages);
                 addOpenRouterSignatures(request.body.messages, request.body.model);
 
                 if (isClaude) {
@@ -2170,7 +2160,6 @@ router.post('/generate', async function (request, response) {
 
             mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
             mergeObjectWithYaml(headers, request.body.custom_include_headers);
-            embedOpenRouterMedia(request.body.messages, { audio: true, video: false });
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.PERPLEXITY) {
             apiUrl = API_PERPLEXITY;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.PERPLEXITY);
@@ -2236,12 +2225,8 @@ router.post('/generate', async function (request, response) {
             if (request.body.repetition_penalty !== undefined) {
                 bodyParams['repetition_penalty'] = request.body.repetition_penalty;
             }
-            if (request.body.reasoning_effort) {
-                const effort = NANOGPT_REASONING_EFFORT_MAP[request.body.reasoning_effort];
-                bodyParams['reasoning'] = { effort: effort };
-            }
 
-            const isClaude = /(?:^|\/)claude[-_]/.test(request.body.model);
+            const isClaude = /^claude-/.test(request.body.model);
             if (enableSystemPromptCache && isClaude) {
                 bodyParams['cache_control'] = {
                     'enabled': true,
@@ -2250,29 +2235,24 @@ router.post('/generate', async function (request, response) {
             }
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.POLLINATIONS) {
             apiUrl = API_POLLINATIONS;
-            apiKey = readSecret(request.user.directories, SECRET_KEYS.POLLINATIONS);
-            headers = {};
+            apiKey = 'NONE';
+            headers = {
+                'Authorization': '',
+            };
             bodyParams = {
                 reasoning_effort: request.body.reasoning_effort,
+                private: true,
+                referrer: 'sillytavern',
                 seed: request.body.seed ?? Math.floor(Math.random() * 99999999),
             };
             if (request.body.json_schema) {
-                bodyParams['response_format'] = {
-                    type: 'json_schema',
-                    json_schema: {
-                        schema: request.body.json_schema.value,
-                    },
-                };
+                setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema);
             }
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.MOONSHOT) {
-            apiUrl = new URL(request.body.reverse_proxy || API_MOONSHOT).toString();
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MOONSHOT);
+            apiUrl = API_MOONSHOT;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.MOONSHOT);
             headers = {};
-            bodyParams = {
-                thinking: {
-                    type: request.body.include_reasoning ? 'enabled' : 'disabled',
-                },
-            };
+            bodyParams = {};
             request.body.json_schema
                 ? setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema)
                 : addAssistantPrefix(request.body.messages, [], 'partial');
@@ -2285,9 +2265,8 @@ router.post('/generate', async function (request, response) {
             };
             throw new Error('This provider is temporarily disabled.');
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.ZAI) {
-            const defaultApiUrl = request.body.zai_endpoint === ZAI_ENDPOINT.CODING ? API_ZAI_CODING : API_ZAI_COMMON;
-            apiUrl = new URL(request.body.reverse_proxy || defaultApiUrl).toString();
-            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.ZAI);
+            apiUrl = request.body.zai_endpoint === ZAI_ENDPOINT.CODING ? API_ZAI_CODING : API_ZAI_COMMON;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.ZAI);
             headers = {
                 'Accept-Language': 'en-US,en',
             };
@@ -2445,7 +2424,7 @@ const multimodalModels = express.Router();
 
 multimodalModels.post('/pollinations', async (_req, res) => {
     try {
-        const response = await fetch('https://gen.pollinations.ai/models');
+        const response = await fetch('https://text.pollinations.ai/models');
 
         if (!response.ok) {
             return res.json([]);
@@ -2458,10 +2437,7 @@ multimodalModels.post('/pollinations', async (_req, res) => {
             return res.json([]);
         }
 
-        const multimodalModels = data
-            .filter(m => Array.isArray(m?.input_modalities))
-            .filter(m => m.input_modalities.includes('image'))
-            .map(m => m.name);
+        const multimodalModels = data.filter(m => m?.vision).map(m => m.name);
         return res.json(multimodalModels);
     } catch (error) {
         console.error(error);
@@ -2618,35 +2594,6 @@ multimodalModels.post('/xai', async (req, res) => {
             // The endpoint says it doesn't support images, but it does
             multimodalModels.push('grok-4-0709');
         }
-        return res.json(multimodalModels);
-    } catch (error) {
-        console.error(error);
-        return res.sendStatus(500);
-    }
-});
-
-multimodalModels.post('/moonshot', async (req, res) => {
-    try {
-        const key = readSecret(req.user.directories, SECRET_KEYS.MOONSHOT);
-
-        if (!key) {
-            return res.json([]);
-        }
-
-        const response = await fetch('https://api.moonshot.ai/v1/models', {
-            headers: {
-                'Authorization': `Bearer ${key}`,
-            },
-        });
-
-        if (!response.ok) {
-            return res.json([]);
-        }
-
-        /** @type {any} */
-        const data = await response.json();
-
-        const multimodalModels = data.data.filter(m => m.supports_image_in).map(m => m.id);
         return res.json(multimodalModels);
     } catch (error) {
         console.error(error);

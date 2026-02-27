@@ -24,7 +24,7 @@ export class AutoCompleteNameResultBase {
         this.start = start;
         this.optionList = optionList;
         this.canBeQuoted = canBeQuoted;
-        if (makeNoMatchText) this.makeNoMatchText = makeNoMatchText;
-        if (makeNoOptionsText) this.makeNoOptionsText = makeNoOptionsText;
+        this.noMatchText = makeNoMatchText ?? this.makeNoMatchText;
+        this.noOptionstext = makeNoOptionsText ?? this.makeNoOptionsText;
     }
 }

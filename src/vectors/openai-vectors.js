@@ -47,13 +47,6 @@ const SOURCES = {
             body.model = null;
         },
     },
-    'nanogpt': {
-        secretKey: SECRET_KEYS.NANOGPT,
-        url: 'https://nano-gpt.com/api/v1',
-        model: 'text-embedding-3-small',
-        headers: {},
-        processBody: () => {},
-    },
 };
 
 /**

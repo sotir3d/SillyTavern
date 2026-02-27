@@ -66,7 +66,6 @@ import {
     scrollChatToBottom,
     scrollOnMediaLoad,
     getOneCharacter,
-    getCharacterSource,
 } from '../script.js';
 import {
     extension_settings,
@@ -91,13 +90,13 @@ import { executeSlashCommands, executeSlashCommandsWithOptions, registerSlashCom
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from './slash-commands/SlashCommandArgument.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { tag_map, tags, importTags } from './tags.js';
+import { tag_map, tags } from './tags.js';
 import { getTextGenServer, textgenerationwebui_settings } from './textgen-settings.js';
 import { tokenizers, getTextTokens, getTokenCount, getTokenCountAsync, getTokenizerModel } from './tokenizers.js';
 import { ToolManager } from './tool-calling.js';
 import { accountStorage } from './util/AccountStorage.js';
-import { timestampToMoment, uuidv4, importFromExternalUrl } from './utils.js';
-import { addGlobalVariable, addLocalVariable, decrementGlobalVariable, decrementLocalVariable, deleteGlobalVariable, deleteLocalVariable, existsGlobalVariable, existsLocalVariable, getGlobalVariable, getLocalVariable, incrementGlobalVariable, incrementLocalVariable, setGlobalVariable, setLocalVariable } from './variables.js';
+import { timestampToMoment, uuidv4 } from './utils.js';
+import { addGlobalVariable, addLocalVariable, decrementGlobalVariable, decrementLocalVariable, deleteGlobalVariable, deleteLocalVariable, getGlobalVariable, getLocalVariable, incrementGlobalVariable, incrementLocalVariable, setGlobalVariable, setLocalVariable } from './variables.js';
 import { convertCharacterBook, getWorldInfoPrompt, loadWorldInfo, reloadEditor, saveWorldInfo, updateWorldInfoList } from './world-info.js';
 import { ChatCompletionService, TextCompletionService } from './custom-request.js';
 import { ConnectionManagerRequestService } from './extensions/shared.js';
@@ -218,9 +217,6 @@ export function getContext() {
         getCharacters,
         getOneCharacter,
         getCharacterCardFields,
-        getCharacterSource,
-        importFromExternalUrl,
-        importTags,
         uuidv4,
         humanizedDateTime,
         updateMessageBlock,
@@ -249,7 +245,6 @@ export function getContext() {
                 add: addLocalVariable,
                 inc: incrementLocalVariable,
                 dec: decrementLocalVariable,
-                has: existsLocalVariable,
             },
             global: {
                 get: getGlobalVariable,
@@ -258,7 +253,6 @@ export function getContext() {
                 add: addGlobalVariable,
                 inc: incrementGlobalVariable,
                 dec: decrementGlobalVariable,
-                has: existsGlobalVariable,
             },
         },
         loadWorldInfo,

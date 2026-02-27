@@ -37,7 +37,6 @@ const SOURCES = [
     'electronhub',
     'openrouter',
     'chutes',
-    'nanogpt',
 ];
 
 /**
@@ -82,8 +81,6 @@ async function getVector(source, sourceSettings, text, isQuery, directories) {
         case 'koboldcpp':
             return sourceSettings.embeddings[text];
         case 'chutes':
-            return getOpenAIVector(text, source, directories, sourceSettings.model);
-        case 'nanogpt':
             return getOpenAIVector(text, source, directories, sourceSettings.model);
     }
 
@@ -151,9 +148,6 @@ async function getBatchVector(source, sourceSettings, texts, isQuery, directorie
                 results.push(...texts.map(x => sourceSettings.embeddings[x]));
                 break;
             case 'chutes':
-                results.push(...await getOpenAIBatchVector(batch, source, directories, sourceSettings.model));
-                break;
-            case 'nanogpt':
                 results.push(...await getOpenAIBatchVector(batch, source, directories, sourceSettings.model));
                 break;
             default:
@@ -243,10 +237,6 @@ function getSourceSettings(source, request) {
         case 'chutes':
             return {
                 model: String(request.body.model || 'chutes-qwen-qwen3-embedding-8b'),
-            };
-        case 'nanogpt':
-            return {
-                model: String(request.body.model || 'text-embedding-3-small'),
             };
         default:
             return {};

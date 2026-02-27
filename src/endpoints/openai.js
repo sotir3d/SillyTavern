@@ -73,7 +73,7 @@ router.post('/caption-image', async (request, response) => {
             key = readSecret(request.user.directories, SECRET_KEYS.COHERE);
         }
 
-        if (request.body.api === 'moonshot' && !request.body.reverse_proxy) {
+        if (request.body.api === 'moonshot') {
             key = readSecret(request.user.directories, SECRET_KEYS.MOONSHOT);
         }
 
@@ -89,20 +89,12 @@ router.post('/caption-image', async (request, response) => {
             key = readSecret(request.user.directories, SECRET_KEYS.ELECTRONHUB);
         }
 
-        if (request.body.api === 'zai' && !request.body.reverse_proxy) {
-            key = readSecret(request.user.directories, SECRET_KEYS.ZAI);
-        }
-
         if (request.body.api === 'zai') {
+            key = readSecret(request.user.directories, SECRET_KEYS.ZAI);
             bodyParams.max_tokens = 4096; // default is 1024
         }
 
-        if (request.body.api === 'pollinations') {
-            key = readSecret(request.user.directories, SECRET_KEYS.POLLINATIONS);
-            bodyParams.seed = Math.floor(Math.random() * Math.pow(2, 32));
-        }
-
-        const noKeyTypes = ['custom', 'ooba', 'koboldcpp', 'vllm', 'llamacpp'];
+        const noKeyTypes = ['custom', 'ooba', 'koboldcpp', 'vllm', 'llamacpp', 'pollinations'];
         if (!key && !request.body.reverse_proxy && !noKeyTypes.includes(request.body.api)) {
             console.warn('No key found for API', request.body.api);
             return response.sendStatus(400);
@@ -178,10 +170,11 @@ router.post('/caption-image', async (request, response) => {
         }
 
         if (request.body.api === 'pollinations') {
-            apiUrl = 'https://gen.pollinations.ai/v1/chat/completions';
+            headers = { Authorization: '' };
+            apiUrl = 'https://text.pollinations.ai/openai/chat/completions';
         }
 
-        if (request.body.api === 'moonshot' && !request.body.reverse_proxy) {
+        if (request.body.api === 'moonshot') {
             apiUrl = 'https://api.moonshot.ai/v1/chat/completions';
         }
 
@@ -197,21 +190,21 @@ router.post('/caption-image', async (request, response) => {
             apiUrl = 'https://api.electronhub.ai/v1/chat/completions';
         }
 
-        if (request.body.api === 'zai' && !request.body.reverse_proxy) {
+        if (request.body.api === 'zai') {
             apiUrl = request.body.zai_endpoint === ZAI_ENDPOINT.CODING
                 ? 'https://api.z.ai/api/coding/paas/v4/chat/completions'
                 : 'https://api.z.ai/api/paas/v4/chat/completions';
-        }
 
-        // Handle video inlining for Z.AI
-        if (request.body.api === 'zai' && /data:video\/\w+;base64,/.test(request.body.image)) {
-            const message = body.messages.find(msg => Array.isArray(msg.content));
-            if (message) {
-                const imgContent = message.content.find(c => c.type === 'image_url');
-                if (imgContent) {
-                    imgContent.type = 'video_url';
-                    imgContent.video_url = imgContent.image_url;
-                    delete imgContent.image_url;
+            // Handle video inlining for Z.AI
+            if (/data:video\/\w+;base64,/.test(request.body.image)) {
+                const message = body.messages.find(msg => Array.isArray(msg.content));
+                if (message) {
+                    const imgContent = message.content.find(c => c.type === 'image_url');
+                    if (imgContent) {
+                        imgContent.type = 'video_url';
+                        imgContent.video_url = imgContent.image_url;
+                        delete imgContent.image_url;
+                    }
                 }
             }
         }
@@ -404,9 +397,9 @@ router.post('/electronhub/models', async (request, response) => {
             console.warn('ElectronHub models request failed', result.statusText, text);
             return response.status(500).send(text);
         }
-        /** @type {any} */
+
         const data = await result.json();
-        const models = data && Array.isArray(data.data) ? data.data : [];
+        const models = data && Array.isArray(data['data']) ? data['data'] : [];
         return response.json(models);
     } catch (error) {
         console.error('ElectronHub models fetch failed', error);
@@ -489,43 +482,6 @@ router.post('/chutes/models/embedding', async (request, response) => {
         return response.json(data.items);
     } catch (error) {
         console.error('Chutes embedding models fetch failed', error);
-        response.sendStatus(500);
-    }
-});
-
-router.post('/nanogpt/models/embedding', async (request, response) => {
-    try {
-        const key = readSecret(request.user.directories, SECRET_KEYS.NANOGPT);
-
-        if (!key) {
-            console.warn('No NanoGPT key found');
-            return response.sendStatus(400);
-        }
-
-        const result = await fetch('https://nano-gpt.com/api/v1/embedding-models', {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${key}`,
-                'Accept-Encoding': 'identity',
-            },
-        });
-
-        if (!result.ok) {
-            const text = await result.text();
-            console.warn('NanoGPT embedding models request failed', result.statusText, text);
-            return response.status(500).send(text);
-        }
-
-        /** @type {any} */
-        const data = await result.json();
-
-        if (!Array.isArray(data?.data)) {
-            console.warn('NanoGPT embedding models response invalid', data);
-            return response.sendStatus(500);
-        }
-        return response.json(data.data);
-    } catch (error) {
-        console.error('NanoGPT embedding models fetch failed', error);
         response.sendStatus(500);
     }
 });

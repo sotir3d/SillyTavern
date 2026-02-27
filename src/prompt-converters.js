@@ -31,8 +31,6 @@ const GEMINI_MEDIA_RESOLUTION = {
     high: 'media_resolution_high',
 };
 
-const enableThoughtSignatures = !!getConfigValue('gemini.thoughtSignatures', true, 'boolean');
-
 /**
  * @typedef {object} PromptNames
  * @property {string} charName Character name
@@ -576,7 +574,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
             const textSignature = message.signature;
 
             parts.forEach((part) => {
-                if (enableThoughtSignatures && textSignature && typeof part.text === 'string') {
+                if (textSignature && typeof part.text === 'string') {
                     part.thoughtSignature = textSignature;
                 } else if (/gemini-3/.test(model)) {
                     // Gemini 3: Fall back to bypass magic for function calls (mandatory) and images
@@ -1298,14 +1296,10 @@ export function calculateGoogleBudgetTokens(maxTokens, reasoningEffort, model) {
 }
 
 /**
- * Embed media content in OpenRouter messages (OpenAI-compatible).
+ * Embed media content in OpenRouter messages.
  * @param {object[]} messages Array of messages
- * @param {object} options Options for embedding
- * @param {boolean} [options.audio] Enable audio embedding (default: true)
- * @param {boolean} [options.video] Enable video embedding (default: true)
- * @returns {void}
  */
-export function embedOpenRouterMedia(messages, { audio = true, video = true } = { audio: true, video: true }) {
+export function embedOpenRouterMedia(messages) {
     if (!Array.isArray(messages)) {
         return;
     }
@@ -1316,11 +1310,11 @@ export function embedOpenRouterMedia(messages, { audio = true, video = true } = 
         }
 
         for (const contentPart of message.content) {
-            if (video && contentPart?.type === 'video_url' && contentPart.video_url?.url?.startsWith('data:')) {
+            if (contentPart?.type === 'video_url' && contentPart.video_url?.url?.startsWith('data:')) {
                 contentPart.type = 'input_video';
             }
 
-            if (audio && contentPart?.type === 'audio_url' && contentPart.audio_url?.url?.startsWith('data:')) {
+            if (contentPart?.type === 'audio_url' && contentPart.audio_url?.url?.startsWith('data:')) {
                 const formatMap = {
                     'audio/mpeg': 'mp3',
                     'audio/wav': 'wav',

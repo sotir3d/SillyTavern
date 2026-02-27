@@ -872,7 +872,7 @@ function getUuidFromUrl(url) {
  * @param {String} url URL to strip
  * @returns {String} Domain name
  */
-export function getHostFromUrl(url) {
+function getHostFromUrl(url) {
     try {
         const urlObj = new URL(url);
         return urlObj.hostname;
@@ -886,7 +886,7 @@ export function getHostFromUrl(url) {
  * @param {String} host Host to check
  * @returns {boolean} If the host is on the whitelist.
  */
-export function isHostWhitelisted(host) {
+function isHostWhitelisted(host) {
     return WHITELIST_GENERIC_URL_DOWNLOAD_SOURCES.includes(host);
 }
 

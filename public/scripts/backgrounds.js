@@ -3,7 +3,7 @@ import { characters, chat_metadata, eventSource, event_types, generateQuietPromp
 import { openThirdPartyExtensionMenu, saveMetadataDebounced } from './extensions.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
-import { createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension, sortIgnoreCaseAndAccents } from './utils.js';
+import { createThumbnail, flashHighlight, getBase64Async, stringFormat, debounce, setupScrollToTop, saveBase64AsFile, getFileExtension } from './utils.js';
 import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
 import { Popup } from './popup.js';
@@ -42,12 +42,6 @@ const THUMBNAIL_CONFIG = {
 };
 
 /**
- * Cache for image metadata.
- * @type {Map<string, import('../../src/endpoints/image-metadata.js').ImageMetadata>}
- */
-const METADATA_CACHE = new Map();
-
-/**
  * Background source types.
  * @readonly
  * @enum {number}
@@ -55,18 +49,6 @@ const METADATA_CACHE = new Map();
 const BG_SOURCES = {
     GLOBAL: 0,
     CHAT: 1,
-};
-
-/**
- * Background sorting options.
- * @readonly
- * @enum {string}
- */
-const BG_SORT_OPTIONS = {
-    AZ: 'az',
-    ZA: 'za',
-    NEWEST: 'newest',
-    OLDEST: 'oldest',
 };
 
 /**
@@ -85,54 +67,12 @@ const BG_TABS = Object.freeze({
  */
 let lazyLoadObserver = null;
 
-/**
- * Cache for the current list of system background filenames.
- * Used to re-sort backgrounds without refetching from the server.
- * @type {string[]}
- */
-let cachedSystemBackgrounds = [];
-
 export let background_settings = {
     name: '__transparent.png',
     url: generateUrlParameter('__transparent.png', false),
     fitting: 'classic',
     animation: false,
-    sortOrder: BG_SORT_OPTIONS.AZ,
 };
-
-/**
- * Sorts an array of background filenames based on the current sort order.
- * @param {string[]} backgrounds - Array of background filenames
- * @param {boolean} isCustom - Whether these are custom (chat) backgrounds
- * @returns {string[]} Sorted array of background filenames
- */
-function sortBackgrounds(backgrounds, isCustom = false) {
-    const sortOrder = background_settings.sortOrder || BG_SORT_OPTIONS.AZ;
-
-    return [...backgrounds].sort((a, b) => {
-        switch (sortOrder) {
-            case BG_SORT_OPTIONS.AZ:
-                return sortIgnoreCaseAndAccents(a, b);
-            case BG_SORT_OPTIONS.ZA:
-                return sortIgnoreCaseAndAccents(b, a);
-            case BG_SORT_OPTIONS.NEWEST:
-            case BG_SORT_OPTIONS.OLDEST: {
-                const keyA = isCustom ? a : `backgrounds/${a}`;
-                const keyB = isCustom ? b : `backgrounds/${b}`;
-                const metaA = METADATA_CACHE.get(keyA);
-                const metaB = METADATA_CACHE.get(keyB);
-                const timestampA = metaA?.addedTimestamp ?? 0;
-                const timestampB = metaB?.addedTimestamp ?? 0;
-                // Newest first (descending) or oldest first (ascending)
-                return sortOrder === BG_SORT_OPTIONS.NEWEST
-                    ? timestampB - timestampA
-                    : timestampA - timestampB;
-            }
-            default:
-                return 0;
-        }
-    });
-}
 
 /**
  * Creates a single thumbnail DOM element. The CSS now handles all sizing.
@@ -148,18 +88,6 @@ function createThumbnailElement(imageData) {
     const clipper = document.createElement('div');
     clipper.className = 'thumbnail-clipper lazy-load-background';
     clipper.style.backgroundImage = PLACEHOLDER_IMAGE;
-
-    // Apply dominant color and aspect ratio as placeholder if available
-    const metadataKey = isCustom ? bg : `backgrounds/${bg}`;
-    const metadata = METADATA_CACHE.get(metadataKey);
-    if (metadata) {
-        if (metadata.dominantColor) {
-            clipper.style.backgroundColor = metadata.dominantColor;
-        }
-        if (metadata.aspectRatio) {
-            thumbnail.css('aspect-ratio', metadata.aspectRatio);
-        }
-    }
 
     const titleElement = thumbnail.find('.BGSampleTitle');
     clipper.appendChild(titleElement.get(0));
@@ -204,9 +132,6 @@ export function loadBackgroundSettings(settings) {
     if (!Object.hasOwn(backgroundSettings, 'animation')) {
         backgroundSettings.animation = false;
     }
-    if (!backgroundSettings.sortOrder) {
-        backgroundSettings.sortOrder = BG_SORT_OPTIONS.AZ;
-    }
 
     // If a value is already saved, use it. Otherwise, determine default based on screen size.
     let columns = backgroundSettings.thumbnailColumns;
@@ -215,14 +140,12 @@ export function loadBackgroundSettings(settings) {
         columns = isNarrowScreen ? THUMBNAIL_COLUMNS_DEFAULT_MOBILE : THUMBNAIL_COLUMNS_DEFAULT_DESKTOP;
     }
     background_settings.thumbnailColumns = columns;
-    background_settings.sortOrder = backgroundSettings.sortOrder;
     applyThumbnailColumns(background_settings.thumbnailColumns);
 
     setBackground(backgroundSettings.name, backgroundSettings.url);
     setFittingClass(backgroundSettings.fitting);
     $('#background_fitting').val(backgroundSettings.fitting);
     $('#background_thumbnails_animation').prop('checked', background_settings.animation);
-    $('#bg-sort').val(background_settings.sortOrder);
     highlightSelectedBackground();
 }
 
@@ -506,11 +429,6 @@ async function onDeleteBackgroundClick(e) {
         // If it's not custom, it's a built-in background. Delete it from the server
         if (!isCustom) {
             await delBackground(bg);
-            // Remove from cache to prevent reappearing on sort change
-            const cacheIndex = cachedSystemBackgrounds.indexOf(bg);
-            if (cacheIndex !== -1) {
-                cachedSystemBackgrounds.splice(cacheIndex, 1);
-            }
         } else {
             const list = chat_metadata[LIST_METADATA_KEY] || [];
             const index = list.indexOf(bg);
@@ -599,8 +517,7 @@ function renderSystemBackgrounds(backgrounds) {
 
     if (sourceList.length === 0) return;
 
-    const sortedList = sortBackgrounds(sourceList, false);
-    sortedList.forEach(bg => {
+    sourceList.forEach(bg => {
         const imageData = { filename: bg, isCustom: false };
         const thumbnail = createThumbnailElement(imageData);
         container.append(thumbnail);
@@ -621,8 +538,7 @@ function renderChatBackgrounds(backgrounds) {
 
     if (sourceList.length === 0) return;
 
-    const sortedList = sortBackgrounds(sourceList, true);
-    sortedList.forEach(bg => {
+    sourceList.forEach(bg => {
         const imageData = { filename: bg, isCustom: true };
         const thumbnail = createThumbnailElement(imageData);
         container.append(thumbnail);
@@ -632,8 +548,6 @@ function renderChatBackgrounds(backgrounds) {
 }
 
 export async function getBackgrounds() {
-    const metadataPromise = preloadImageMetadata();
-
     const response = await fetch('/api/backgrounds/all', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -643,37 +557,8 @@ export async function getBackgrounds() {
         const { images, config } = await response.json();
         Object.assign(THUMBNAIL_CONFIG, config);
 
-        cachedSystemBackgrounds = images;
-
-        await metadataPromise;
-
         renderSystemBackgrounds(images);
         highlightSelectedBackground();
-    }
-}
-
-/**
- * Preloads all image metadata to use dominant colors as placeholders.
- * @return {Promise<void>}
- */
-async function preloadImageMetadata() {
-    try {
-        const response = await fetch('/api/image-metadata/all', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-            body: JSON.stringify({ prefix: 'backgrounds/' }),
-        });
-        if (response.ok) {
-            const data = await response.json();
-            if (data?.images) {
-                METADATA_CACHE.clear();
-                for (const [path, metadata] of Object.entries(data.images)) {
-                    METADATA_CACHE.set(path, metadata);
-                }
-            }
-        }
-    } catch (error) {
-        console.error('[ImageMetadata] Failed to preload metadata:', error);
     }
 }
 
@@ -1036,17 +921,6 @@ export function initBackgrounds() {
     $('#auto_background').on('click', autoBackgroundCommand);
     $('#add_bg_button').on('change', (e) => onBackgroundUploadSelected(e.originalEvent));
     $('#bg-filter').on('input', () => debouncedOnBackgroundFilterInput());
-    $('#bg-sort').on('change', function () {
-        background_settings.sortOrder = String($(this).val());
-        saveSettingsDebounced();
-        // Re-render both galleries with new sort order
-        renderSystemBackgrounds(cachedSystemBackgrounds);
-        renderChatBackgrounds();
-        highlightSelectedBackground();
-        highlightLockedBackground();
-        // Re-apply any active search filter
-        onBackgroundFilterInput();
-    });
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'lockbg',
         callback: () => {

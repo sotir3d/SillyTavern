@@ -32,10 +32,9 @@ const basicAuthMiddleware = async function (request, response, callback) {
     }
 
     const usePerUserAuth = PER_USER_BASIC_AUTH && ENABLE_ACCOUNTS;
-    const [username, ...passwordParts] = Buffer.from(credentials, 'base64')
+    const [username, password] = Buffer.from(credentials, 'base64')
         .toString('utf8')
         .split(':');
-    const password = passwordParts.join(':');
 
     if (!usePerUserAuth && username === basicAuthUserName && password === basicAuthUserPassword) {
         return callback();
