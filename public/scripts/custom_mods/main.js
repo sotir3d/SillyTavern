@@ -189,19 +189,16 @@ export function shouldStopOnCharName() {
  */
 export function applyNameOverrides(options, defaultName1, defaultName2) {
     // 1. Resolve {{char}}
-    // If a fixed AI name is selected (not 'none'), use it. 
-    // Otherwise fall back to the provided override or the global default.
-    const activeAiName = getActiveAiName(options.name2Override ?? defaultName2);
+    // FIX: We no longer override name2Override here.
+    // This allows {{char}} to retain the original character card name 
+    // so it doesn't overwrite the character's description!
     
-    // Force the macro engine to use this name for {{char}}
-    options.name2Override = activeAiName;
-
     // 2. Resolve {{user}}
-    // If "User is Char" is on, use the Active AI Name (calculated above).
+    // If "User is AI" is on, use the Active AI Name.
     // Otherwise use the provided override or global default.
     const currentUserName = options.name1Override ?? defaultName1;
     if (modSettings.user_is_char) {
-        options.name1Override = activeAiName;
+        options.name1Override = getActiveAiName(options.name2Override ?? defaultName2);
     } else {
         options.name1Override = currentUserName;
     }
