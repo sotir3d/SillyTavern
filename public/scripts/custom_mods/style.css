@@ -58,6 +58,12 @@
     font-weight: 600;
 }
 
+#custom_user_name_input {
+    width: 130px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+}
+
 #fixed_ai_name_options {
     display: flex;
     flex-direction: column;

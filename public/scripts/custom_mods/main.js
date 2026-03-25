@@ -2,7 +2,8 @@ import { saveSettingsDebounced } from "../../script.js";
 
 // --- Configuration & State ---
 export const modSettings = {
-    user_is_char: false,
+    custom_user_name_enabled: false,
+    custom_user_name_value: '',
     fixed_ai_name_choice: 'none',
     fixed_ai_name_value_one: 'Preset 1',
     fixed_ai_name_value_two: 'Preset 2'
@@ -38,21 +39,24 @@ function injectUI() {
                 <div class="custom-tooltip-icon fa-solid fa-circle-info"></div>
                 <span class="tooltiptext">
                     <b>Controls Chat Naming:</b><br><br>
-                    • <b>User is AI:</b> Your messages are labeled with the actively selected AI name.<br><br>
+                    • <b>Custom User Name:</b> When toggled on, the text field value is used as {{user}} instead of the default name.<br><br>
                     • <b>{{char}}:</b> Resets to standard behavior (Card Name).<br><br>
                     • <b>Fixed AI Name:</b> The AI's messages and prompt cues use the selected preset.<br><br>
                     • <b>Substitute Strings:</b><br>
                             {{character_card}} is always the active character card.<br>
-                            Use {{fixed_name}} and {{fixed_name_2}} substitue strings to access fixed name strings.<br> 
+                            Use {{fixed_name}} and {{fixed_name_2}} substitue strings to access fixed name strings.<br>
                             {{active_fixed}} is replaced with the actively selected radio button.
                 </span>
             </div>
             <div class="inline-flex-item">
-                <label for="user_is_char_toggle" class="settings_label">User is AI</label>
+                <label for="custom_user_name_toggle" class="settings_label">Custom User</label>
                 <div class="text_switch">
-                    <input id="user_is_char_toggle" type="checkbox" ${modSettings.user_is_char ? 'checked' : ''}>
-                    <label for="user_is_char_toggle"></label>
+                    <input id="custom_user_name_toggle" type="checkbox" ${modSettings.custom_user_name_enabled ? 'checked' : ''}>
+                    <label for="custom_user_name_toggle"></label>
                 </div>
+            </div>
+            <div class="inline-flex-item">
+                <input id="custom_user_name_input" class="text_pole" type="text" placeholder="{{user}} name" value="${modSettings.custom_user_name_value}">
             </div>
             <div id="fixed_ai_name_options">
                 <div class="fixed-name-option">
@@ -91,8 +95,13 @@ function setupEventListeners() {
     });
 
     // Settings Changes
-    $('#user_is_char_toggle').on('change', function() {
-        modSettings.user_is_char = $(this).is(':checked');
+    $('#custom_user_name_toggle').on('change', function() {
+        modSettings.custom_user_name_enabled = $(this).is(':checked');
+        saveModSettings();
+    });
+
+    $('#custom_user_name_input').on('input', function() {
+        modSettings.custom_user_name_value = $(this).val();
         saveModSettings();
     });
 
@@ -158,8 +167,8 @@ export function getActiveAiName(defaultName) {
 
 /** Returns the effective User name based on toggles. */
 export function getActiveUserName(realUserName, defaultAiName) {
-    if (modSettings.user_is_char) {
-        return getActiveAiName(defaultAiName);
+    if (modSettings.custom_user_name_enabled && modSettings.custom_user_name_value) {
+        return modSettings.custom_user_name_value;
     }
     return realUserName;
 }
@@ -180,7 +189,7 @@ export function injectCustomMacros(environment) {
 
 /** Returns true if we should forbid the AI from writing {{char}} name. */
 export function shouldStopOnCharName() {
-    return modSettings.user_is_char || modSettings.fixed_ai_name_choice !== 'none';
+    return modSettings.fixed_ai_name_choice !== 'none';
 }
 
 /** 
@@ -194,11 +203,11 @@ export function applyNameOverrides(options, defaultName1, defaultName2) {
     // so it doesn't overwrite the character's description!
     
     // 2. Resolve {{user}}
-    // If "User is AI" is on, use the Active AI Name.
+    // If custom user name is enabled and has a value, use it.
     // Otherwise use the provided override or global default.
     const currentUserName = options.name1Override ?? defaultName1;
-    if (modSettings.user_is_char) {
-        options.name1Override = getActiveAiName(options.name2Override ?? defaultName2);
+    if (modSettings.custom_user_name_enabled && modSettings.custom_user_name_value) {
+        options.name1Override = modSettings.custom_user_name_value;
     } else {
         options.name1Override = currentUserName;
     }
