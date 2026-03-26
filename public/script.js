@@ -2916,7 +2916,20 @@ export function getStoppingStrings(isImpersonate, isContinue) {
         result.unshift('\n');
     }
 
-    return result.filter(x => x).filter(onlyUnique);
+    // [CUSTOM MOD HOOK] The actively selected AI name must NEVER appear in a stopping string
+    // as a turn delimiter. This covers both bare names ("\nUser:") and instruct-formatted
+    // variants ("\n### User:", "\n[INST] User:", etc.) that arise when the active AI name
+    // collides with name1 or instruct sequence templates.
+    const activeAiName = CustomMods.getActiveAiName(name2);
+
+    return result.filter(x => x).filter(x => {
+        const stripped = x.startsWith('\n') ? x.slice(1) : x;
+        // Filter any stop string whose turn-delimiter name matches the active AI name.
+        if (stripped.endsWith(activeAiName + ':')) return false;
+        // Also catch formats without a trailing colon (e.g. ChatML: "<|im_start|>User")
+        if (stripped.endsWith(activeAiName)) return false;
+        return true;
+    }).filter(onlyUnique);
 }
 
 /**
@@ -6254,6 +6267,13 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
         let wrongName = isImpersonate
             ? (!power_user.allow_name2_display ? name2 : '')  // char
             : (!power_user.allow_name1_display ? name1 : '');  // user
+
+        // [CUSTOM MOD HOOK] The actively selected AI name is never "wrong" — even if it
+        // collides with name1.  Treating it as wrong would delete the entire response.
+        const activeAiName = CustomMods.getActiveAiName(name2);
+        if (wrongName && wrongName === activeAiName) {
+            wrongName = '';
+        }
 
         if (wrongName) {
             // If the message starts with the wrong name, delete the entire response
