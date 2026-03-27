@@ -87,14 +87,23 @@
 }
 
 .fixed-name-option input[type="text"] {
-    width: 130px;
+    width: 105px;
     padding: 2px 5px;
+}
+
+.bias-checkbox {
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    accent-color: var(--SmartThemeQuoteColor, #f1c40f);
 }
 
 /* Tooltip Styles */
 #custom_toggles_container .tooltip {
     position: absolute;
-    bottom: 5px;
+    bottom: 0px;
     right: 5px;
     z-index: 20;
 }

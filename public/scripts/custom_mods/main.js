@@ -6,7 +6,10 @@ export const modSettings = {
     custom_user_name_value: '',
     fixed_ai_name_choice: 'none',
     fixed_ai_name_value_one: 'Preset 1',
-    fixed_ai_name_value_two: 'Preset 2'
+    fixed_ai_name_value_two: 'Preset 2',
+    use_bias_for_char: true,
+    use_bias_for_one: true,
+    use_bias_for_two: true
 };
 
 // --- Initialization ---
@@ -42,6 +45,7 @@ function injectUI() {
                     • <b>Custom User Name:</b> When toggled on, the text field value is used as {{user}} instead of the default name.<br><br>
                     • <b>{{char}}:</b> Resets to standard behavior (Card Name).<br><br>
                     • <b>Fixed AI Name:</b> The AI's messages and prompt cues use the selected preset.<br><br>
+                    • <b>Prefix Checkbox:</b> The checkbox on each option controls whether "Start Reply With" is used when that option is active.<br><br>
                     • <b>Substitute Strings:</b><br>
                             {{character_card}} is always the active character card.<br>
                             Use {{fixed_name}} and {{fixed_name_2}} substitue strings to access fixed name strings.<br>
@@ -62,14 +66,17 @@ function injectUI() {
                 <div class="fixed-name-option">
                     <input type="radio" id="fixed_ai_name_none" name="fixed_ai_name_choice" value="none" ${modSettings.fixed_ai_name_choice === 'none' ? 'checked' : ''}>
                     <label for="fixed_ai_name_none">{{char}}</label>
+                    <input type="checkbox" id="use_bias_for_char" class="bias-checkbox" title="Use 'Start Reply With' prefix" ${modSettings.use_bias_for_char ? 'checked' : ''}>
                 </div>
                 <div class="fixed-name-option">
                     <input type="radio" id="fixed_ai_name_one" name="fixed_ai_name_choice" value="one" ${modSettings.fixed_ai_name_choice === 'one' ? 'checked' : ''}>
                     <input id="fixed_ai_name_input_one" class="text_pole" type="text" value="${modSettings.fixed_ai_name_value_one}">
+                    <input type="checkbox" id="use_bias_for_one" class="bias-checkbox" title="Use 'Start Reply With' prefix" ${modSettings.use_bias_for_one ? 'checked' : ''}>
                 </div>
                 <div class="fixed-name-option">
                     <input type="radio" id="fixed_ai_name_two" name="fixed_ai_name_choice" value="two" ${modSettings.fixed_ai_name_choice === 'two' ? 'checked' : ''}>
                     <input id="fixed_ai_name_input_two" class="text_pole" type="text" value="${modSettings.fixed_ai_name_value_two}">
+                    <input type="checkbox" id="use_bias_for_two" class="bias-checkbox" title="Use 'Start Reply With' prefix" ${modSettings.use_bias_for_two ? 'checked' : ''}>
                 </div>
             </div>
         </div>
@@ -113,6 +120,11 @@ function setupEventListeners() {
     $('#fixed_ai_name_input_one, #fixed_ai_name_input_two').on('input', function() {
         modSettings.fixed_ai_name_value_one = $('#fixed_ai_name_input_one').val();
         modSettings.fixed_ai_name_value_two = $('#fixed_ai_name_input_two').val();
+        saveModSettings();
+    });
+
+    $('.bias-checkbox').on('change', function() {
+        modSettings[$(this).attr('id')] = $(this).is(':checked');
         saveModSettings();
     });
 }
@@ -185,6 +197,13 @@ export function injectCustomMacros(environment) {
     // but environment.char is a string.
     
     environment.active_fixed = getActiveAiName(environment.char);
+}
+
+/** Returns true if the "Start Reply With" prefix should be used for the currently selected name option. */
+export function shouldIncludePromptBias() {
+    if (modSettings.fixed_ai_name_choice === 'one') return modSettings.use_bias_for_one;
+    if (modSettings.fixed_ai_name_choice === 'two') return modSettings.use_bias_for_two;
+    return modSettings.use_bias_for_char;
 }
 
 /** Returns true if we should forbid the AI from writing {{char}} name. */

@@ -5635,7 +5635,8 @@ export function getBiasStrings(textareaText, type) {
         }
     }
 
-    promptBias = messageBias || promptBias || power_user.user_prompt_bias || '';
+    const userBiasFallback = CustomMods.shouldIncludePromptBias() ? power_user.user_prompt_bias : '';
+    promptBias = messageBias || promptBias || userBiasFallback || '';
     const isUserPromptBias = promptBias === power_user.user_prompt_bias;
 
     // Substitute params for everything
@@ -6221,6 +6222,7 @@ export function cleanUpMessage({ getMessage, isImpersonate, isContinue, displayI
     // Add the prompt bias before anything else
     if (
         includeUserPromptBias &&
+        CustomMods.shouldIncludePromptBias() &&
         power_user.user_prompt_bias &&
         !isImpersonate &&
         !isContinue &&
