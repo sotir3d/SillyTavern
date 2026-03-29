@@ -20,6 +20,7 @@ import { isTrueBoolean } from './utils.js';
  * @property {string} parameters - The parameters for the tool invocation.
  * @property {string} result - The result of the tool invocation.
  * @property {string?} signature - The thought signature associated with the tool invocation.
+ * @property {string?} reasoning - The plaintext reasoning associated with this tool call turn.
  */
 
 /**
@@ -410,8 +411,8 @@ export class ToolManager {
         if (tools.length) {
             console.log('[ToolManager] Registered function tools:', tools);
 
-            data['tools'] = tools;
-            data['tool_choice'] = 'auto';
+            data.tools = tools;
+            data.tool_choice = 'auto';
         }
     }
 
@@ -661,6 +662,7 @@ export class ToolManager {
             chat_completion_sources.AZURE_OPENAI,
             chat_completion_sources.ZAI,
             chat_completion_sources.SILICONFLOW,
+            chat_completion_sources.NANOGPT,
         ];
         return supportedSources.includes(settings.chat_completion_source);
     }
@@ -764,7 +766,7 @@ export class ToolManager {
      * @param {any} data Reply data
      * @returns {Promise<ToolInvocationResult>} Successful tool invocations
      */
-    static async invokeFunctionTools(data) {
+    static async invokeFunctionTools(data, { reasoningText = null } = {}) {
         /** @type {ToolInvocationResult} */
         const result = {
             invocations: [],
@@ -813,6 +815,7 @@ export class ToolManager {
                 parameters: stringify(parameters),
                 result: toolResult,
                 signature: toolCall.signature || null,
+                reasoning: reasoningText || null,
             };
             result.invocations.push(invocation);
         }

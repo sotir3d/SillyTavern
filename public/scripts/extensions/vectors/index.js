@@ -24,7 +24,7 @@ import {
 import { collapseNewlines, registerDebugFunction } from '../../power-user.js';
 import { SECRET_KEYS, secret_state } from '../../secrets.js';
 import { getDataBankAttachments, getDataBankAttachmentsForSource, getFileAttachment } from '../../chats.js';
-import { debounce, getStringHash as calculateHash, waitUntilCondition, onlyUnique, splitRecursive, trimToStartSentence, trimToEndSentence, escapeHtml } from '../../utils.js';
+import { debounce, getStringHash as calculateHash, waitUntilCondition, onlyUnique, splitRecursive, trimToStartSentence, trimToEndSentence, escapeHtml, isTrueBoolean } from '../../utils.js';
 import { debounce_timeout } from '../../constants.js';
 import { getSortedEntries } from '../../world-info.js';
 import { textgen_types, textgenerationwebui_settings } from '../../textgen-settings.js';
@@ -32,6 +32,7 @@ import { SlashCommandParser } from '../../slash-commands/SlashCommandParser.js';
 import { SlashCommand } from '../../slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../slash-commands/SlashCommandArgument.js';
 import { SlashCommandEnumValue, enumTypes } from '../../slash-commands/SlashCommandEnumValue.js';
+import { commonEnumProviders } from '../../slash-commands/SlashCommandCommonEnumsProvider.js';
 import { slashCommandReturnHelper } from '../../slash-commands/SlashCommandReturnHelper.js';
 import { generateWebLlmChatPrompt, isWebLlmSupported } from '../shared.js';
 import { WebLlmVectorProvider } from './webllm.js';
@@ -70,6 +71,8 @@ const settings = {
     webllm_model: '',
     google_model: 'text-embedding-005',
     chutes_model: 'chutes-qwen-qwen3-embedding-8b',
+    nanogpt_model: 'text-embedding-3-small',
+    siliconflow_model: 'Qwen/Qwen3-Embedding-0.6B',
     summarize: false,
     summarize_sent: false,
     summary_source: 'main',
@@ -249,8 +252,7 @@ async function summarizeExtra(element) {
             const data = await apiResult.json();
             element.text = data.summary;
         }
-    }
-    catch (error) {
+    } catch (error) {
         console.log(error);
         return false;
     }
@@ -746,7 +748,7 @@ function overlapChunks(chunk, index, chunks, overlapSize) {
     return overlappedChunk;
 }
 
-window['vectors_rearrangeChat'] = rearrangeChat;
+globalThis.vectors_rearrangeChat = rearrangeChat;
 
 const onChatEvent = debounce(async () => await moduleWorker.update(), debounce_timeout.relaxed);
 
@@ -833,6 +835,13 @@ function getVectorsRequestBody(args = {}) {
         case 'chutes':
             body.model = extension_settings.vectors.chutes_model;
             break;
+        case 'nanogpt':
+            body.model = extension_settings.vectors.nanogpt_model;
+            break;
+        case 'siliconflow':
+            body.model = extension_settings.vectors.siliconflow_model;
+            body.siliconflow_endpoint = oai_settings.siliconflow_endpoint;
+            break;
         default:
             break;
     }
@@ -918,13 +927,15 @@ function throwIfSourceInvalid() {
     if (settings.source === 'openai' && !secret_state[SECRET_KEYS.OPENAI] ||
         settings.source === 'electronhub' && !secret_state[SECRET_KEYS.ELECTRONHUB] ||
         settings.source === 'chutes' && !secret_state[SECRET_KEYS.CHUTES] ||
+        settings.source === 'nanogpt' && !secret_state[SECRET_KEYS.NANOGPT] ||
         settings.source === 'openrouter' && !secret_state[SECRET_KEYS.OPENROUTER] ||
         settings.source === 'palm' && !secret_state[SECRET_KEYS.MAKERSUITE] ||
         settings.source === 'vertexai' && !secret_state[SECRET_KEYS.VERTEXAI] && !secret_state[SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT] ||
         settings.source === 'mistral' && !secret_state[SECRET_KEYS.MISTRALAI] ||
         settings.source === 'togetherai' && !secret_state[SECRET_KEYS.TOGETHERAI] ||
         settings.source === 'nomicai' && !secret_state[SECRET_KEYS.NOMICAI] ||
-        settings.source === 'cohere' && !secret_state[SECRET_KEYS.COHERE]) {
+        settings.source === 'cohere' && !secret_state[SECRET_KEYS.COHERE] ||
+        settings.source === 'siliconflow' && !secret_state[SECRET_KEYS.SILICONFLOW]) {
         throw new Error('Vectors: API key missing', { cause: 'api_key_missing' });
     }
 
@@ -932,8 +943,7 @@ function throwIfSourceInvalid() {
         if (!settings.alt_endpoint_url) {
             throw new Error('Vectors: API URL missing', { cause: 'api_url_missing' });
         }
-    }
-    else {
+    } else {
         if (settings.source === 'ollama' && !textgenerationwebui_settings.server_urls[textgen_types.OLLAMA] ||
             settings.source === 'vllm' && !textgenerationwebui_settings.server_urls[textgen_types.VLLM] ||
             settings.source === 'koboldcpp' && !textgenerationwebui_settings.server_urls[textgen_types.KOBOLDCPP] ||
@@ -1133,6 +1143,7 @@ function toggleSettings() {
     $('#openai_vectorsModel').toggle(settings.source === 'openai');
     $('#electronhub_vectorsModel').toggle(settings.source === 'electronhub');
     $('#chutes_vectorsModel').toggle(settings.source === 'chutes');
+    $('#nanogpt_vectorsModel').toggle(settings.source === 'nanogpt');
     $('#openrouter_vectorsModel').toggle(settings.source === 'openrouter');
     $('#cohere_vectorsModel').toggle(settings.source === 'cohere');
     $('#ollama_vectorsModel').toggle(settings.source === 'ollama');
@@ -1142,6 +1153,7 @@ function toggleSettings() {
     $('#webllm_vectorsModel').toggle(settings.source === 'webllm');
     $('#koboldcpp_vectorsModel').toggle(settings.source === 'koboldcpp');
     $('#google_vectorsModel').toggle(settings.source === 'palm' || settings.source === 'vertexai');
+    $('#siliconflow_vectorsModel').toggle(settings.source === 'siliconflow');
     $('#vector_altEndpointUrl').toggle(vectorApiRequiresUrl.includes(settings.source));
     switch (settings.source) {
         case 'webllm':
@@ -1155,6 +1167,12 @@ function toggleSettings() {
             break;
         case 'chutes':
             loadChutesModels();
+            break;
+        case 'nanogpt':
+            loadNanoGPTModels();
+            break;
+        case 'siliconflow':
+            loadSiliconFlowModels();
             break;
     }
 }
@@ -1191,6 +1209,40 @@ function populateChutesModelSelect(models) {
         settings.chutes_model = models[0].slug;
     }
     $('#vectors_chutes_model').val(settings.chutes_model);
+}
+
+async function loadNanoGPTModels() {
+    try {
+        const response = await fetch('/api/openai/nanogpt/models/embedding', {
+            method: 'POST',
+            headers: getRequestHeaders({ omitContentType: true }),
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        /** @type {Array<any>} */
+        const data = await response.json();
+        const models = Array.isArray(data) ? data : [];
+        populateNanoGPTModelSelect(models);
+    } catch (err) {
+        console.warn('NanoGPT models fetch failed', err);
+        populateNanoGPTModelSelect([]);
+    }
+}
+
+function populateNanoGPTModelSelect(models) {
+    const select = $('#vectors_nanogpt_model');
+    select.empty();
+    for (const m of models) {
+        const option = document.createElement('option');
+        option.value = m.id;
+        option.text = m.name || m.id;
+        select.append(option);
+    }
+    if (!settings.nanogpt_model && models.length) {
+        settings.nanogpt_model = models[0].id;
+    }
+    $('#vectors_nanogpt_model').val(settings.nanogpt_model);
 }
 
 async function loadElectronHubModels() {
@@ -1268,6 +1320,45 @@ function populateOpenRouterModelSelect(models) {
         settings.openrouter_model = models[0].id;
     }
     $('#vectors_openrouter_model').val(settings.openrouter_model);
+}
+
+async function loadSiliconFlowModels() {
+    try {
+        const response = await fetch('/api/openai/siliconflow/models/embedding', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({
+                siliconflow_endpoint: oai_settings.siliconflow_endpoint,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        /** @type {Array<any>} */
+        const data = await response.json();
+        const models = Array.isArray(data) ? data : [];
+        populateSiliconFlowModelSelect(models);
+    } catch (err) {
+        console.warn('SiliconFlow models fetch failed', err);
+        populateSiliconFlowModelSelect([]);
+    }
+}
+
+function populateSiliconFlowModelSelect(models) {
+    const select = $('#vectors_siliconflow_model');
+    select.empty();
+    for (const m of models) {
+        const option = document.createElement('option');
+        option.value = m.id;
+        option.text = m.id;
+        select.append(option);
+    }
+    if (!settings.siliconflow_model && models.length) {
+        settings.siliconflow_model = models[0].id;
+    }
+    $('#vectors_siliconflow_model').val(settings.siliconflow_model);
 }
 
 /**
@@ -1412,7 +1503,6 @@ async function onViewStatsClick() {
             messageElement.addClass('vectorized');
         }
     }
-
 }
 
 async function onVectorizeAllFilesClick() {
@@ -1620,7 +1710,7 @@ jQuery(async () => {
     }
 
     // Migrate from old settings
-    if (settings['enabled']) {
+    if (settings.enabled) {
         settings.enabled_chats = true;
     }
 
@@ -1675,6 +1765,16 @@ jQuery(async () => {
     });
     $('#vectors_chutes_model').val(settings.chutes_model).on('change', () => {
         settings.chutes_model = String($('#vectors_chutes_model').val());
+        Object.assign(extension_settings.vectors, settings);
+        saveSettingsDebounced();
+    });
+    $('#vectors_nanogpt_model').val(settings.nanogpt_model).on('change', () => {
+        settings.nanogpt_model = String($('#vectors_nanogpt_model').val());
+        Object.assign(extension_settings.vectors, settings);
+        saveSettingsDebounced();
+    });
+    $('#vectors_siliconflow_model').val(settings.siliconflow_model).on('change', () => {
+        settings.siliconflow_model = String($('#vectors_siliconflow_model').val());
         Object.assign(extension_settings.vectors, settings);
         saveSettingsDebounced();
     });
@@ -2034,6 +2134,174 @@ jQuery(async () => {
             new SlashCommandArgument('Query to search by.', ARGUMENT_TYPE.STRING, true, false),
         ],
         returns: ARGUMENT_TYPE.LIST,
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'vector-threshold',
+        helpString: 'Set the vector score threshold or return the current threshold if no argument is provided.',
+        returns: 'score threshold value',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'Score threshold (number).',
+                typeList: [ARGUMENT_TYPE.NUMBER],
+            }),
+        ],
+        callback: async (_args, value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) {
+                return String(settings.score_threshold);
+            }
+
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+                toastr.warning('Score threshold must be a number between 0 and 1.');
+                return '';
+            }
+
+            $('#vectors_score_threshold')
+                .val(parsed)
+                .trigger('input');
+
+            return String(settings.score_threshold);
+        },
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'vector-query',
+        helpString: 'Set the vector query messages or returns the current query messages count if no argument is provided',
+        returns: 'the query messages value',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'Query messages (number > 0).',
+                typeList: [ARGUMENT_TYPE.NUMBER],
+            }),
+        ],
+        callback: async (_args, value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) {
+                return String(settings.query);
+            }
+
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                toastr.warning('Query messages must be a number greater than 0.');
+                return '';
+            }
+
+            $('#vectors_query')
+                .val(parsed)
+                .trigger('input');
+
+            return String(settings.query);
+        },
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'vector-max-entries',
+        helpString: 'Set the vector world info max entries or returns the current max entries if no argument is provided',
+        returns: 'world info max entries',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'Max entries (number > 0).',
+                typeList: [ARGUMENT_TYPE.NUMBER],
+            }),
+        ],
+        callback: async (_args, value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) {
+                return String(settings.max_entries);
+            }
+
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                toastr.warning('Max entries must be a number greater than 0.');
+                return '';
+            }
+
+            $('#vectors_max_entries')
+                .val(parsed)
+                .trigger('input');
+
+            return String(settings.max_entries);
+        },
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'vector-chats-state',
+        helpString: 'Set whether chat vectorization is enabled or return the current boolean if no argument is provided',
+        returns: 'boolean for if chat vectorization is enabled',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'boolean to set whether chat vectorization is enabled',
+                typeList: [ARGUMENT_TYPE.BOOLEAN],
+                enumList: commonEnumProviders.boolean('trueFalse')(),
+            }),
+        ],
+        callback: async (_args, value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) {
+                return String(settings.enabled_chats);
+            }
+
+            const parsed = isTrueBoolean(raw);
+            $('#vectors_enabled_chats')
+                .prop('checked', parsed)
+                .trigger('input');
+
+            return String(settings.enabled_chats);
+        },
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'vector-files-state',
+        helpString: 'Set whether file vectorization is enabled or return the current boolean if no argument is provided',
+        returns: 'boolean for if file vectorization is enabled',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'boolean to set whether file vectorization is enabled',
+                typeList: [ARGUMENT_TYPE.BOOLEAN],
+                enumList: commonEnumProviders.boolean('trueFalse')(),
+            }),
+        ],
+        callback: async (_args, value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) {
+                return String(settings.enabled_files);
+            }
+
+            const parsed = isTrueBoolean(raw) ;
+            $('#vectors_enabled_files')
+                .prop('checked', parsed)
+                .trigger('input');
+
+            return String(settings.enabled_files);
+        },
+    }));
+
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'vector-worldinfo-state',
+        helpString: 'Set whether world info vectorization is enabled or return the current boolean if no argument is provided',
+        returns: 'boolean for if world info vectorization is enabled',
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'boolean to set whether world info vectorization is enabled',
+                typeList: [ARGUMENT_TYPE.BOOLEAN],
+                enumList: commonEnumProviders.boolean('trueFalse')(),
+            }),
+        ],
+        callback: async (_args, value) => {
+            const raw = String(value ?? '').trim();
+            if (!raw) {
+                return String(settings.enabled_world_info);
+            }
+
+            const parsed = isTrueBoolean(raw);
+            $('#vectors_enabled_world_info')
+                .prop('checked', parsed)
+                .trigger('input');
+
+            return String(settings.enabled_world_info);
+        },
     }));
 
     registerDebugFunction('purge-everything', 'Purge all vector indices', 'Obliterate all stored vectors for all sources. No mercy.', async () => {
