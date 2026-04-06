@@ -11,7 +11,8 @@
       "Bash(cd:*)",
       "Bash(taskkill //F //FI 'WINDOWTITLE eq SillyTavern')",
       "Bash(netstat -ano)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(gh run:*)"
     ]
   }
 }
