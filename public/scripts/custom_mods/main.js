@@ -1,4 +1,5 @@
-import { saveSettingsDebounced } from "../../script.js";
+import { saveSettingsDebounced, updateMessageBlock } from "../../script.js";
+import { PromptReasoning } from "../reasoning.js";
 
 // --- Configuration & State ---
 export const modSettings = {
@@ -405,17 +406,82 @@ export async function triggerRetryBranch() {
 
     msg.swipes[msg.swipe_id] = sourceText;
     msg.swipe_info[msg.swipe_id] = sourceInfo;
-    
-    msg.mes = sourceText;
 
-    const domMsg = document.querySelector(`.mes[mesid="${lastId}"] .mes_text`);
-    if (domMsg) {
-        domMsg.innerText = sourceText; 
+    // Restore the full message state from the previous swipe, not just the text.
+    // Without this, msg.extra (including extra.reasoning) still holds the CURRENT
+    // swipe's data, so the subsequent continue treats the retry as a continuation
+    // of the current swipe rather than the previous one. This is especially broken
+    // for thinking-only swipes, where extra.reasoning is the entire payload.
+    msg.mes = sourceText;
+    if (sourceInfo) {
+        if (sourceInfo.extra) {
+            msg.extra = structuredClone(sourceInfo.extra);
+        }
+        if (sourceInfo.send_date !== undefined) msg.send_date = sourceInfo.send_date;
+        if (sourceInfo.gen_started !== undefined) msg.gen_started = sourceInfo.gen_started;
+        if (sourceInfo.gen_finished !== undefined) msg.gen_finished = sourceInfo.gen_finished;
     }
+
+    // Re-render the message so the message text and reasoning UI both reflect
+    // the restored previous-swipe state before continue kicks in.
+    updateMessageBlock(lastId, msg);
 
     skipNextBranching = true;
     $('#option_continue').trigger('click');
 }
+
+// --- Reasoning prefix preservation on stop ---
+//
+// When the user clicks Stop while generation is continuing on a thinking-only
+// message, the upstream flow has the following ordering problem:
+//   1. stopGeneration() emits GENERATION_ENDED + GENERATION_STOPPED, which
+//      synchronously call PromptReasoning.clearLatest() and wipe #LATEST.
+//   2. The streaming loop then unwinds asynchronously, and cleanUpMessage()
+//      runs. It checks `!PromptReasoning.getLatestPrefix()` to decide whether
+//      it is safe to trim leading/trailing whitespace from the new tokens.
+//   3. Because #LATEST is already cleared, the check passes and the leading
+//      space of the newly streamed reasoning text gets trimmed away.
+//   4. autoParseReasoningFromMessage then joins prefixReasoningFormatted with
+//      the trimmed mes, producing "I'm thinking" + "that I should agree."
+//      = "I'm thinkingthat I should agree." -- space gone.
+//
+// For natural completion this never happens because GENERATION_ENDED only
+// fires AFTER the cleanup is done.
+//
+// Fix: temporarily suppress PromptReasoning.clearLatest() around the stop
+// click so the prefix safeguard in cleanUpMessage still kicks in. We use a
+// capture-phase listener so the flag is set before the bubble-phase
+// stopGeneration() handler runs (which is what fires both events).
+(function patchClearLatestForStop() {
+    if (!PromptReasoning || typeof PromptReasoning.clearLatest !== 'function') return;
+    if (PromptReasoning.__customModClearLatestPatched) return;
+    PromptReasoning.__customModClearLatestPatched = true;
+
+    let suppressClearLatest = false;
+    const originalClearLatest = PromptReasoning.clearLatest.bind(PromptReasoning);
+
+    PromptReasoning.clearLatest = function () {
+        if (suppressClearLatest) return;
+        return originalClearLatest();
+    };
+
+    const armSuppression = () => {
+        suppressClearLatest = true;
+        // Generous window to cover the async unwind of the streaming loop and
+        // the subsequent cleanUpMessage / finalize calls. After this expires,
+        // any future clearLatest call works normally; if a brand new generation
+        // started in the meantime its constructor has already replaced #LATEST,
+        // so leaving the stale value alone is harmless.
+        setTimeout(() => { suppressClearLatest = false; }, 1000);
+    };
+
+    document.addEventListener('click', function (e) {
+        const target = e.target;
+        if (target && typeof target.closest === 'function' && target.closest('#mes_stop')) {
+            armSuppression();
+        }
+    }, true); // capture phase, runs before the jQuery delegated handler
+})();
 
 // --- Streaming Hooks ---
 
