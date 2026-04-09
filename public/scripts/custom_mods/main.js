@@ -1,5 +1,4 @@
 import { saveSettingsDebounced, updateMessageBlock } from "../../script.js";
-import { PromptReasoning } from "../reasoning.js";
 
 // --- Configuration & State ---
 export const modSettings = {
@@ -20,6 +19,12 @@ export function initCustomMods() {
     injectUI();
     setupEventListeners();
     setupMessageRendererHook();
+    // Defer the PromptReasoning patch via dynamic import. We can't statically
+    // import reasoning.js from here because main.js is the first import in
+    // script.js, which would force reasoning.js to evaluate before script.js
+    // has bound its own re-exports (eventSource/event_types), and reasoning.js
+    // has top-level eventSource.on() calls that would crash on undefined.
+    patchPromptReasoningClearLatest();
 }
 
 function loadModSettings() {
@@ -452,7 +457,17 @@ export async function triggerRetryBranch() {
 // click so the prefix safeguard in cleanUpMessage still kicks in. We use a
 // capture-phase listener so the flag is set before the bubble-phase
 // stopGeneration() handler runs (which is what fires both events).
-(function patchClearLatestForStop() {
+async function patchPromptReasoningClearLatest() {
+    let PromptReasoning;
+    try {
+        // Dynamic import: avoids forcing reasoning.js to evaluate during the
+        // static import phase of main.js, which would happen before script.js
+        // has had a chance to bind its eventSource/event_types re-exports.
+        ({ PromptReasoning } = await import("../reasoning.js"));
+    } catch (err) {
+        console.warn("[Custom Mod] Failed to import PromptReasoning for clearLatest patch:", err);
+        return;
+    }
     if (!PromptReasoning || typeof PromptReasoning.clearLatest !== 'function') return;
     if (PromptReasoning.__customModClearLatestPatched) return;
     PromptReasoning.__customModClearLatestPatched = true;
@@ -481,7 +496,7 @@ export async function triggerRetryBranch() {
             armSuppression();
         }
     }, true); // capture phase, runs before the jQuery delegated handler
-})();
+}
 
 // --- Streaming Hooks ---
 
