@@ -3,7 +3,8 @@
     "allow": [
       "Bash(grep -i \"\\\\.js$\")",
       "Bash(grep -E \"\\\\.js$\")",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(node -c scripts/custom_mods/main.js)"
     ]
   }
 }

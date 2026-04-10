@@ -446,24 +446,33 @@ export async function triggerRetryBranch() {
 //      it is safe to trim leading/trailing whitespace from the new tokens.
 //   3. Because #LATEST is already cleared, the check passes and the leading
 //      space of the newly streamed reasoning text gets trimmed away.
-//   4. autoParseReasoningFromMessage then joins prefixReasoningFormatted with
-//      the trimmed mes, producing "I'm thinking" + "that I should agree."
-//      = "I'm thinkingthat I should agree." -- space gone.
-//
-// For natural completion this never happens because GENERATION_ENDED only
-// fires AFTER the cleanup is done.
 //
 // Fix: temporarily suppress PromptReasoning.clearLatest() around the stop
 // click so the prefix safeguard in cleanUpMessage still kicks in. We use a
 // capture-phase listener so the flag is set before the bubble-phase
 // stopGeneration() handler runs (which is what fires both events).
+//
+// However, the suppression must NOT extend into the MESSAGE_RECEIVED event
+// that fires later in finalizeIntermediaryMessage. The reasoning handler
+// (reasoning.js:1446) calls getLatestPrefix() there to decide whether to
+// re-parse the message. If #LATEST is still alive with prefixIncomplete=true,
+// it prepends the thinking prefix to message.mes, fails to find a closing
+// </think> tag, and writes the concatenated thinking+message text back as mes.
+//
+// Solution: use eventSource.makeFirst(MESSAGE_RECEIVED) to clear the
+// suppression and call the real clearLatest() right before the reasoning
+// handler runs. This gives us the correct behavior at both call sites:
+//   - cleanUpMessage (in onProgressStreaming) sees the prefix → no trim ✓
+//   - MESSAGE_RECEIVED handler sees no prefix → no destructive re-parse ✓
 async function patchPromptReasoningClearLatest() {
     let PromptReasoning;
+    let eventSource, event_types;
     try {
         // Dynamic import: avoids forcing reasoning.js to evaluate during the
         // static import phase of main.js, which would happen before script.js
         // has had a chance to bind its eventSource/event_types re-exports.
         ({ PromptReasoning } = await import("../reasoning.js"));
+        ({ eventSource, event_types } = await import("../../script.js"));
     } catch (err) {
         console.warn("[Custom Mod] Failed to import PromptReasoning for clearLatest patch:", err);
         return;
@@ -480,15 +489,35 @@ async function patchPromptReasoningClearLatest() {
         return originalClearLatest();
     };
 
+    const disarmAndClear = () => {
+        if (!suppressClearLatest) return;
+        suppressClearLatest = false;
+        originalClearLatest();
+    };
+
     const armSuppression = () => {
         suppressClearLatest = true;
-        // Generous window to cover the async unwind of the streaming loop and
-        // the subsequent cleanUpMessage / finalize calls. After this expires,
-        // any future clearLatest call works normally; if a brand new generation
-        // started in the meantime its constructor has already replaced #LATEST,
-        // so leaving the stale value alone is harmless.
-        setTimeout(() => { suppressClearLatest = false; }, 1000);
+        // Fallback: if MESSAGE_RECEIVED never fires (error paths, impersonate),
+        // clear the suppression after a generous window so it doesn't leak.
+        setTimeout(disarmAndClear, 2000);
     };
+
+    // Lift suppression BEFORE the reasoning handler's MESSAGE_RECEIVED listener
+    // re-parses the message. The reasoning handler (reasoning.js:1446) prepends
+    // getLatestPrefix() to message.mes and re-parses; if #LATEST is still alive
+    // with prefixIncomplete=true, the prefix+mes concatenation has no closing
+    // </think> tag, so the parse fails and the raw thinking text overwrites mes.
+    //
+    // Order in finalizeIntermediaryMessage:
+    //   1. onProgressStreaming(final) → cleanUpMessage → getLatestPrefix() [needs prefix]
+    //   2. ... finish / sync ...
+    //   3. emit MESSAGE_RECEIVED → reasoning handler → getLatestPrefix() [must be empty]
+    //
+    // makeFirst ensures we run at step 3 before the reasoning handler.
+    eventSource.makeFirst(event_types.MESSAGE_RECEIVED, disarmAndClear);
+
+    // Safety: also clear on chat change so suppression never leaks across chats.
+    eventSource.makeFirst(event_types.CHAT_CHANGED, disarmAndClear);
 
     document.addEventListener('click', function (e) {
         const target = e.target;
