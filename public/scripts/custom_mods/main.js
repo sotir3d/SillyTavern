@@ -9,7 +9,8 @@ export const modSettings = {
     fixed_ai_name_value_two: 'Preset 2',
     use_bias_for_char: true,
     use_bias_for_one: true,
-    use_bias_for_two: true
+    use_bias_for_two: true,
+    individual_thinking_blocks: false,
 };
 
 // --- Initialization ---
@@ -67,6 +68,13 @@ function injectUI() {
             </div>
             <div class="inline-flex-item">
                 <input id="custom_user_name_input" class="text_pole" type="text" placeholder="{{user}} name" value="${modSettings.custom_user_name_value}">
+            </div>
+            <div class="inline-flex-item">
+                <label for="individual_thinking_toggle" class="settings_label">Indiv. Thinking</label>
+                <div class="text_switch">
+                    <input id="individual_thinking_toggle" type="checkbox" ${modSettings.individual_thinking_blocks ? 'checked' : ''}>
+                    <label for="individual_thinking_toggle"></label>
+                </div>
             </div>
             <div id="fixed_ai_name_options">
                 <div class="fixed-name-option">
@@ -131,6 +139,11 @@ function setupEventListeners() {
 
     $('.bias-checkbox').on('change', function() {
         modSettings[$(this).attr('id')] = $(this).is(':checked');
+        saveModSettings();
+    });
+
+    $('#individual_thinking_toggle').on('change', function() {
+        modSettings.individual_thinking_blocks = $(this).is(':checked');
         saveModSettings();
     });
 }
@@ -215,6 +228,22 @@ export function shouldIncludePromptBias() {
 /** Returns true if we should forbid the AI from writing {{char}} name. */
 export function shouldStopOnCharName() {
     return modSettings.fixed_ai_name_choice !== 'none';
+}
+
+/**
+ * When "Individual Thinking Blocks" is on, returns an empty string for any
+ * AI message whose stored name doesn't match the currently active AI name,
+ * so that only the active persona's prior thinking blocks are sent to the model.
+ * @param {object} message - A coreChat message object (has .name and .is_user)
+ * @param {string} defaultAiName - The character card name (name2)
+ * @param {string} reasoning - The raw reasoning string for this message
+ * @returns {string}
+ */
+export function filterReasoningForMessage(message, defaultAiName, reasoning) {
+    if (!modSettings.individual_thinking_blocks) return reasoning;
+    if (message.is_user) return reasoning;
+    if (message.name !== getActiveAiName(defaultAiName)) return '';
+    return reasoning;
 }
 
 /** 

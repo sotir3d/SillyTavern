@@ -4477,15 +4477,17 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
     for (let i = coreChat.length - 1; i >= 0; i--) {
         const depth = coreChat.length - i - (isContinue ? 2 : 1);
         const isPrefix = isContinue && i === coreChat.length - 1;
+        // [CUSTOM MOD HOOK] Filter reasoning to only the active persona's thinking blocks
+        const rawReasoning = getRegexedString(
+            String(coreChat[i].extra?.reasoning ?? ''),
+            regex_placement.REASONING,
+            { isPrompt: true, depth: depth },
+        );
         coreChat[i] = {
             ...coreChat[i],
             mes: promptReasoning.addToMessage(
                 coreChat[i].mes,
-                getRegexedString(
-                    String(coreChat[i].extra?.reasoning ?? ''),
-                    regex_placement.REASONING,
-                    { isPrompt: true, depth: depth },
-                ),
+                CustomMods.filterReasoningForMessage(coreChat[i], name2, rawReasoning),
                 isPrefix,
                 coreChat[i].extra?.reasoning_duration,
             ),
