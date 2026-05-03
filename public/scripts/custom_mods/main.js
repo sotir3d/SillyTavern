@@ -290,12 +290,15 @@ export function getCustomMacros(originalCharName) {
 // --- State Tracking ---
 let skipNextBranching = false;
 let retryButtonTracker = null;
+let retryButtonGenerationActive = false;
+let retryButtonGenerationEventsBound = false;
+let isRetryButtonGenerationActive = null;
 
 // --- UI Injection ---
 
 /**
  * Injects a free-floating Retry button attached to the body.
- * Pins to the right of the Send OR Stop button (whichever is active).
+ * Pins to the right of Send while idle and hides during active generation.
  */
 export function injectRetryButton() {
     // Prevent duplicates
@@ -337,14 +340,19 @@ export function injectRetryButton() {
 
     // 4. Position Tracker
     const updatePosition = () => {
-        // Detect which button is currently the main action button
-        // During generation, #send_but is hidden and #mes_stop is shown
-        let anchor = $('#send_but');
-        if (!anchor.is(':visible')) {
-            anchor = $('#mes_stop');
+        const generationActive =
+            retryButtonGenerationActive ||
+            $('#mes_stop').is(':visible') ||
+            (typeof isRetryButtonGenerationActive === 'function' && isRetryButtonGenerationActive());
+
+        if (generationActive) {
+            btn.css('display', 'none');
+            return;
         }
 
-        // If neither is visible (e.g. full immersive mode or hidden UI), hide this too
+        const anchor = $('#send_but');
+
+        // If Send is not visible (e.g. full immersive mode or hidden UI), hide this too
         if (!anchor.is(':visible')) {
             btn.css('display', 'none');
             return;
@@ -365,11 +373,40 @@ export function injectRetryButton() {
         });
     };
 
+    bindRetryButtonGenerationEvents(updatePosition);
+
     // Run tracker loop
     updatePosition();
+    if (retryButtonTracker) clearInterval(retryButtonTracker);
     if (window.retryButtonTracker) clearInterval(window.retryButtonTracker);
-    window.retryButtonTracker = setInterval(updatePosition, 50); // Faster update for smoother Stop/Send swap
+    retryButtonTracker = setInterval(updatePosition, 50); // Faster update for smoother Send visibility changes
+    window.retryButtonTracker = retryButtonTracker;
     $(window).on('resize', updatePosition);
+}
+
+async function bindRetryButtonGenerationEvents(updatePosition) {
+    if (retryButtonGenerationEventsBound) return;
+    retryButtonGenerationEventsBound = true;
+
+    try {
+        const { eventSource, event_types, isGenerating } = await import("../../script.js");
+        isRetryButtonGenerationActive = isGenerating;
+
+        eventSource.on(event_types.GENERATION_STARTED, () => {
+            retryButtonGenerationActive = true;
+            updatePosition();
+        });
+
+        const clearGenerationActive = () => {
+            retryButtonGenerationActive = false;
+            updatePosition();
+        };
+
+        eventSource.on(event_types.GENERATION_ENDED, clearGenerationActive);
+        eventSource.on(event_types.GENERATION_STOPPED, clearGenerationActive);
+    } catch (err) {
+        console.warn("[Custom Mod] Failed to bind Retry Branch generation events:", err);
+    }
 }
 
 // --- Logic ---
