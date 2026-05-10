@@ -8111,6 +8111,17 @@ function updateMessage(div) {
     if (bias) {
         text = removeMacros(text);
     }
+
+    const nameInput = mesBlock.find('.edit_name_input');
+    if (nameInput.length > 0) {
+        const newName = String(nameInput.val() ?? '').trim();
+        if (newName) {
+            mes.name = newName;
+            this_edit_mes_chname = newName;
+            mesElement.attr('ch_name', newName);
+        }
+    }
+
     mes.mes = text;
     if (mes.swipe_id !== undefined) {
         ensureSwipes(mes);
@@ -8229,6 +8240,12 @@ export async function messageEdit(editMessageId) {
         chatElement.scrollTop(chatScrollPosition);
     }
 
+    const nameElement = messageElement.find('.ch_name .name_text');
+    if (nameElement.length > 0) {
+        const nameInput = $('<input type="text" class="edit_name_input text_pole">').val(this_edit_mes_chname);
+        nameElement.replaceWith(nameInput);
+    }
+
     updateEditArrowClasses();
 }
 
@@ -8267,6 +8284,12 @@ async function messageEditCancel(messageId = this_edit_mes_id) {
     const reasoningEditDone = thisMesBlock.find('.mes_reasoning_edit_cancel:visible');
     if (reasoningEditDone.length > 0) {
         reasoningEditDone.trigger('click');
+    }
+
+    const nameInput = thisMesDiv.find('.edit_name_input');
+    if (nameInput.length > 0) {
+        const originalName = chat[messageId].name || (chat[messageId].is_user ? name1 : name2);
+        nameInput.replaceWith($('<span class="name_text"></span>').text(originalName));
     }
 
     await eventSource.emit(event_types.MESSAGE_UPDATED, messageId);
@@ -8355,6 +8378,12 @@ async function messageEditDone(div) {
     );
     mesBlock.find('.mes_bias').empty();
     mesBlock.find('.mes_bias').append(messageFormatting(bias, '', false, false, -1, {}, false));
+
+    const nameInput = mesBlock.find('.edit_name_input');
+    if (nameInput.length > 0) {
+        nameInput.replaceWith($('<span class="name_text"></span>').text(mes.name));
+    }
+
     appendMediaToMessage(mes, div.closest('.mes'));
     addCopyToCodeBlocks(div.closest('.mes'));
 
